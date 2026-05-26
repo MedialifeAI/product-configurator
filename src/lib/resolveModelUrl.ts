@@ -1,10 +1,12 @@
 import { modelApiUrl } from '@/lib/modelBlobs';
 import type {
+  ComponentId,
   DragonVariant,
   MetalId,
   ModelSource,
   SiteCatalog,
 } from '@/lib/siteConfigTypes';
+import { builtinPartIconPath } from './siteConfigTypes';
 
 export function resolveSource(src: ModelSource | undefined, fallback: string): string {
   if (!src) return fallback;
@@ -25,8 +27,10 @@ export function heroWatchUrl(catalog: SiteCatalog, sceneOverride: string | null)
   return resolveSource(catalog.heroWatch, '/models/full_watch/watch_full_default.glb');
 }
 
+const AR_WATCH_DEFAULT = '/models/full_watch/watch_full_ar.glb';
+
 export function arWatchUrl(catalog: SiteCatalog): string {
-  return resolveSource(catalog.arWatch, '/models/full_watch/watch_full_default.glb');
+  return resolveSource(catalog.arWatch, AR_WATCH_DEFAULT);
 }
 
 export function dragonModelUrl(dragon: DragonVariant): string {
@@ -49,8 +53,18 @@ export function metalPartUrl(
 
 export function staticPartUrl(
   catalog: SiteCatalog,
-  part: 'dial' | 'globe' | 'hand' | 'strap',
+  part: 'dial' | 'hand' | 'strap',
   fallback: string,
 ): string {
   return resolveSource(catalog.staticParts[part], fallback);
+}
+
+export function globePartUrl(catalog: SiteCatalog, metal: MetalId): string {
+  const fallback =
+    resolveSource(catalog.staticParts.globe, '/models/parts/globe_rose_gold.glb');
+  return resolveSource(catalog.globeParts[metal], fallback);
+}
+
+export function partIconUrl(catalog: SiteCatalog, id: ComponentId): string {
+  return resolveSource(catalog.partIcons?.[id], builtinPartIconPath(id));
 }

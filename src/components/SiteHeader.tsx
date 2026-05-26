@@ -22,7 +22,10 @@ export default function SiteHeader() {
       }`}
     >
       <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between">
-        <a href="#" className="font-display text-xl md:text-2xl tracking-wider gold-text">
+        <a
+          href="#"
+          className="font-display text-[35px] md:text-[39px] leading-none tracking-wider gold-text"
+        >
           {header.brand}
         </a>
         <nav className="hidden md:flex items-center gap-10 text-xs tracking-[0.25em] uppercase text-bone/80">

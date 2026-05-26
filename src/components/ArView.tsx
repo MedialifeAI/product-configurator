@@ -1,6 +1,7 @@
 'use client';
 
 import { AR_MODEL_USDZ } from '@/lib/ar';
+import { AR_MODEL_GLB_FALLBACK } from '@/lib/ar';
 import {
   buildArPresets,
   computeModelViewerScale,
@@ -11,6 +12,13 @@ import {
 } from '@/lib/arSettings';
 import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
 import { useEscapeKey } from '@/hooks/useEscapeKey';
+import {
+  estimateArLoadSeconds,
+  formatAssetMegabytes,
+  isLargeArAsset,
+  probeAssetByteSize,
+} from '@/lib/arAssetSize';
+import { arWatchUrl } from '@/lib/resolveModelUrl';
 import type { DragonId, MetalId, SiteCatalog } from '@/lib/siteConfigTypes';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -98,12 +106,41 @@ export default function ArView({
   const [iosUsdz, setIosUsdz] = useState<string | undefined>(undefined);
   const [dragon, setDragon] = useState(initialDragon);
   const [metal, setMetal] = useState(initialMetal);
-  const [previewScaleAdj, setPreviewScaleAdj] = useState(1);
 
-  const src = useMemo(
-    () => resolveArComboModelUrl(catalog, dragon, metal),
-    [catalog, dragon, metal],
+  useEffect(() => {
+    setDragon(initialDragon);
+    setMetal(initialMetal);
+  }, [initialDragon, initialMetal]);
+  const [previewScaleAdj, setPreviewScaleAdj] = useState(1);
+  const [loadProgress, setLoadProgress] = useState(0);
+  const [loadingLabel, setLoadingLabel] = useState('Preparing AR…');
+  const [assetBytes, setAssetBytes] = useState<number | null>(null);
+
+  const primarySrc = useMemo(
+    () => resolveArComboModelUrl(catalog, dragon, metal, ar),
+    [catalog, dragon, metal, ar],
   );
+  const [src, setSrc] = useState(primarySrc);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSrc(primarySrc);
+    fetch(primarySrc, { method: 'HEAD' })
+      .then(res => {
+        if (cancelled) return;
+        if (!res.ok && primarySrc !== AR_MODEL_GLB_FALLBACK) {
+          setSrc(AR_MODEL_GLB_FALLBACK);
+        }
+      })
+      .catch(() => {
+        if (!cancelled && primarySrc !== AR_MODEL_GLB_FALLBACK) {
+          setSrc(AR_MODEL_GLB_FALLBACK);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [primarySrc]);
 
   const presets = useMemo(
     () => buildArPresets(catalog, ar.maxPresets),
@@ -116,7 +153,7 @@ export default function ArView({
     return `${d?.label ?? dragon} · ${m?.label ?? metal}`;
   }, [catalog, dragon, metal]);
 
-  const usesSharedArAsset = !catalog.arCombos?.[`${dragon}_${metal}`];
+  const usesSharedArAsset = src === arWatchUrl(catalog);
 
   const setViewerRef = (el: HTMLElement | null) => {
     viewerRef.current = el as ModelViewerElement | null;
@@ -146,6 +183,21 @@ export default function ArView({
       cancelled = true;
     };
   }, [iosSrc]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAssetBytes(null);
+    probeAssetByteSize(src).then(bytes => {
+      if (!cancelled) setAssetBytes(bytes);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [src]);
+
+  const loadEtaSec = useMemo(() => estimateArLoadSeconds(assetBytes), [assetBytes]);
+  const assetSizeLabel = assetBytes ? formatAssetMegabytes(assetBytes) : null;
+  const assetIsLarge = isLargeArAsset(assetBytes);
 
   const applyWatchScale = useCallback(() => {
     const el = viewerRef.current;
@@ -193,6 +245,26 @@ export default function ArView({
     applyWatchScale();
   }, [loaded, applyWatchScale, src]);
 
+  useEffect(() => {
+    setLoadProgress(0);
+    setLoadingLabel('Loading 3D model…');
+    setLoaded(false);
+    setError(false);
+  }, [src, loadKey]);
+
+  useEffect(() => {
+    const el = viewerRef.current;
+    if (!el) return;
+    const onProgress = (event: Event) => {
+      const total = (event as CustomEvent<{ totalProgress?: number }>).detail?.totalProgress;
+      if (typeof total === 'number') {
+        setLoadProgress(Math.min(100, Math.round(total * 100)));
+      }
+    };
+    el.addEventListener('progress', onProgress);
+    return () => el.removeEventListener('progress', onProgress);
+  }, [ready, loadKey, src]);
+
   const rotatePreview = (deltaDeg: number) => {
     const el = viewerRef.current;
     if (!el) return;
@@ -204,7 +276,11 @@ export default function ArView({
   const selectPreset = (preset: ArPreset) => {
     setDragon(preset.dragon);
     setMetal(preset.metal);
+    if (!ar.usePerComboArModels) return;
+    setLoadProgress(0);
+    setLoadingLabel('Loading configuration…');
     setLoaded(false);
+    setLoadKey(k => k + 1);
   };
 
   const arScaleAttr = ar.lockRealWorldScale ? 'fixed' : 'auto';
@@ -248,7 +324,7 @@ export default function ArView({
             shadow-intensity={ar.shadowIntensity}
             exposure={String(ar.exposure)}
             tone-mapping="commerce"
-            interpolation-decay={200}
+            interpolation-decay={400}
             camera-orbit={ar.cameraOrbit}
             min-camera-orbit={ar.minCameraOrbit}
             max-camera-orbit={ar.maxCameraOrbit}
@@ -299,10 +375,39 @@ export default function ArView({
             </div>
           </div>
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="text-center">
+          <div className="absolute inset-0 flex flex-col items-center justify-center px-8">
+            <div className="w-full max-w-xs text-center">
               <div className="inline-block w-10 h-10 border-2 border-jc-gold/30 border-t-jc-gold rounded-full animate-spin" />
-              <div className="mt-4 text-xs tracking-[0.3em] uppercase text-bone/60">Preparing AR…</div>
+              <div className="mt-4 text-xs tracking-[0.25em] uppercase text-bone/60">{loadingLabel}</div>
+              {loadProgress > 0 && (
+                <div className="mt-4">
+                  <div className="h-1 rounded-full bg-bone/10 overflow-hidden">
+                    <div
+                      className="h-full bg-jc-gold/80 transition-all duration-300"
+                      style={{ width: `${loadProgress}%` }}
+                    />
+                  </div>
+                  <div className="mt-2 text-[10px] text-bone/45 tabular-nums">{loadProgress}%</div>
+                </div>
+              )}
+              {assetSizeLabel && (
+                <p className="mt-3 text-[10px] text-bone/45">
+                  AR model · {assetSizeLabel}
+                  {loadEtaSec != null && ` · first load may take ~${loadEtaSec}s on mobile`}
+                </p>
+              )}
+              {assetIsLarge && (
+                <p className="mt-3 text-[10px] text-amber-200/70 leading-relaxed">
+                  This file is still uncompressed. Run{' '}
+                  <code className="text-bone/55">scripts/compress.sh</code> on the hero GLB (~15 MB) for
+                  production AR speed.
+                </p>
+              )}
+              {!ar.usePerComboArModels && (
+                <p className="mt-3 text-[10px] text-bone/40 leading-relaxed">
+                  Fast AR mode uses one shared watch file — choose dragon and metal in the configurator first.
+                </p>
+              )}
             </div>
           </div>
         )}
@@ -328,7 +433,7 @@ export default function ArView({
           </div>
         )}
 
-        {ar.showPresetBar && loaded && presets.length > 0 && (
+        {ar.showPresetBar && ar.usePerComboArModels && loaded && presets.length > 0 && (
           <div className="absolute left-0 right-0 bottom-2 z-10 px-3 pointer-events-auto">
             <div className="glass rounded-2xl p-2 border border-bone/10 max-h-[28vh] overflow-y-auto overscroll-contain">
               <div className="text-[9px] uppercase tracking-[0.25em] text-bone/45 mb-1.5 px-1">
@@ -383,9 +488,14 @@ export default function ArView({
           {ar.lockRealWorldScale
             ? `Locked to ~${Math.round(ar.caseDiameterMm * ar.sizeMultiplier)} mm case width in AR.`
             : 'Pinch to resize in AR · drag to rotate in preview.'}
-          {usesSharedArAsset && (
+          {!ar.usePerComboArModels && (
             <span className="block mt-1 text-bone/35">
-              Per-combo AR exports can be assigned in Admin → 3D Models → AR combos.
+              Fast AR mode: one shared model. Compress combo GLBs (~15–40 MB each), then enable per-combo AR in Admin.
+            </span>
+          )}
+          {ar.usePerComboArModels && usesSharedArAsset && (
+            <span className="block mt-1 text-bone/35">
+              This combo is using the fallback AR watch — add a file under public/models/ar/combos/.
             </span>
           )}
         </p>

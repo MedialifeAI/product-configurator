@@ -12,6 +12,8 @@ import { arComboKey } from '@/lib/arSettings';
 import AdminScenePreviews from '@/components/admin/AdminScenePreviews';
 import {
   ADMIN_TOKEN_STORAGE_KEY,
+  builtinArComboPath,
+  builtinPartIconPath,
   DEFAULT_SITE_CONFIG,
   type ArSettings,
   type MetalId,
@@ -268,6 +270,11 @@ function ArTab({
       </Card>
       <Card title="AR UX">
         <Toggle
+          label="Use per-combo AR GLBs (slower — enable only after Draco compress to ~15–40 MB each)"
+          checked={a.usePerComboArModels}
+          onChange={v => setAr('usePerComboArModels', v)}
+        />
+        <Toggle
           label="Show dragon × metal quick-pick bar in AR"
           checked={a.showPresetBar}
           onChange={v => setAr('showPresetBar', v)}
@@ -275,21 +282,24 @@ function ArTab({
         <Slider label="Max presets (0 = all)" value={a.maxPresets} min={0} max={12} step={1} onChange={v => setAr('maxPresets', Math.round(v))} />
         <Field label="Tap-to-place hint" value={a.tapToPlaceHint} onChange={v => setAr('tapToPlaceHint', v)} multiline />
       </Card>
-      <Card title="Per-combo AR models (optional)">
+      <Card title="Per-combo AR models">
         <p className="text-[11px] text-bone/40 mb-3">
-          Upload assembled GLBs per configuration for true AR variant swaps. Without these, all presets use the default AR watch GLB.
+          Default: assembled GLB at <code className="text-bone/55">/models/ar/combos/&#123;dragon&#125;_&#123;metal&#125;.glb</code> (12 files).
+          Upload or override a slot to replace the built-in path; missing files fall back to the default AR watch GLB.
         </p>
         {config.catalog.dragons.map(d =>
           config.catalog.metals.map(m => {
             const key = arComboKey(d.id, m.id);
-            const source = config.catalog.arCombos?.[key] ?? { type: 'builtin' as const, path: '' };
+            const comboDefault = builtinArComboPath(d.id, m.id);
+            const source =
+              config.catalog.arCombos?.[key] ?? ({ type: 'builtin' as const, path: comboDefault });
             return (
               <ModelSourceEditor
                 key={key}
                 label={key}
-                source={source.type === 'builtin' && !source.path ? { type: 'builtin', path: '/models/full_watch/watch_full_default.glb' } : source}
+                source={source}
                 uploadSlot={`ar/${key}`}
-                builtinDefault="/models/full_watch/watch_full_default.glb"
+                builtinDefault={comboDefault}
                 onChange={src =>
                   setConfig(p => ({
                     ...p,
@@ -378,12 +388,15 @@ function ModelsTab({
           label="AR handoff GLB"
           source={config.catalog.arWatch}
           uploadSlot="ar/watch"
-          builtinDefault="/models/full_watch/watch_full_default.glb"
+          builtinDefault="/models/full_watch/watch_full_ar.glb"
           onChange={src => setConfig(p => ({ ...p, catalog: { ...p.catalog, arWatch: src } }))}
         />
       </Card>
       <Card title="Static parts">
-        {(['dial', 'globe', 'hand', 'strap'] as const).map(part => (
+        <p className="text-[11px] text-bone/40 mb-3">
+          Dial includes the inner background plate. Strap export includes top and bottom armatures.
+        </p>
+        {(['dial', 'hand', 'strap'] as const).map(part => (
           <ModelSourceEditor
             key={part}
             label={part}
@@ -396,6 +409,63 @@ function ModelsTab({
                 catalog: {
                   ...p.catalog,
                   staticParts: { ...p.catalog.staticParts, [part]: src },
+                },
+              }))
+            }
+          />
+        ))}
+      </Card>
+      <Card title="Inspect part icons">
+        <p className="text-[11px] text-bone/40 mb-3">
+          Circular thumbnails on the configurator Inspect grid. Upload PNG/WebP/JPEG from Blender renders
+          (square crop, ~256×256 recommended). Served from <code className="text-bone/50">/images/parts/</code> or admin blob storage.
+        </p>
+        {config.catalog.components.map(c => (
+          <PartIconSourceEditor
+            key={c.id}
+            label={c.label}
+            source={
+              config.catalog.partIcons?.[c.id] ?? {
+                type: 'builtin',
+                path: builtinPartIconPath(c.id),
+              }
+            }
+            uploadSlot={`icons/${c.id}`}
+            builtinDefault={builtinPartIconPath(c.id)}
+            onChange={src =>
+              setConfig(p => ({
+                ...p,
+                catalog: {
+                  ...p.catalog,
+                  partIcons: { ...p.catalog.partIcons, [c.id]: src },
+                },
+              }))
+            }
+          />
+        ))}
+      </Card>
+      <Card title="Globe (per case metal)">
+        <p className="text-[11px] text-bone/40 mb-3">
+          Terrestrial globe from the animated movement rig (not the dial background plate). Loaded with movement; metal picker swaps these files.
+        </p>
+        {config.catalog.metals.map(m => (
+          <ModelSourceEditor
+            key={m.id}
+            label={`Globe · ${m.label}`}
+            source={
+              config.catalog.globeParts[m.id] ?? {
+                type: 'builtin',
+                path: `/models/parts/globe_${m.id}.glb`,
+              }
+            }
+            uploadSlot={`parts/globe/${m.id}`}
+            builtinDefault={`/models/parts/globe_${m.id}.glb`}
+            onChange={src =>
+              setConfig(p => ({
+                ...p,
+                catalog: {
+                  ...p.catalog,
+                  globeParts: { ...p.catalog.globeParts, [m.id]: src },
                 },
               }))
             }
@@ -480,7 +550,7 @@ function MetalPartsEditor({
   );
 }
 
-function ModelSourceEditor({
+function PartIconSourceEditor({
   label,
   source,
   uploadSlot,
@@ -490,7 +560,50 @@ function ModelSourceEditor({
   label: string;
   source: ModelSource;
   uploadSlot: string;
+  builtinDefault: string;
+  onChange: (s: ModelSource) => void;
+}) {
+  const preview =
+    source.type === 'builtin'
+      ? source.path
+      : source.type === 'url'
+        ? source.url
+        : `/api/models/${source.key}`;
+
+  return (
+    <div className="mb-5 last:mb-0 pb-5 last:pb-0 border-b border-bone/10 last:border-0">
+      <div className="flex items-center gap-4 mb-3">
+        <div className="w-14 h-14 rounded-full overflow-hidden border border-jc-gold/30 bg-ink shrink-0">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={preview || builtinDefault} alt="" className="w-full h-full object-cover" />
+        </div>
+        <div className="text-sm text-jc-gold/90">{label}</div>
+      </div>
+      <ModelSourceEditor
+        label="Icon source"
+        source={source}
+        uploadSlot={uploadSlot}
+        builtinDefault={builtinDefault}
+        acceptImages
+        onChange={onChange}
+      />
+    </div>
+  );
+}
+
+function ModelSourceEditor({
+  label,
+  source,
+  uploadSlot,
+  builtinDefault,
+  acceptImages,
+  onChange,
+}: {
+  label: string;
+  source: ModelSource;
+  uploadSlot: string;
   builtinDefault?: string;
+  acceptImages?: boolean;
   onChange: (s: ModelSource) => void;
 }) {
   const [uploading, setUploading] = useState(false);
@@ -507,7 +620,8 @@ function ModelSourceEditor({
         body: form,
       });
       if (!res.ok) throw new Error('upload failed');
-      onChange({ type: 'blob', key: uploadSlot });
+      const json = (await res.json()) as { slot?: string };
+      onChange({ type: 'blob', key: json.slot ?? uploadSlot });
     } finally {
       setUploading(false);
     }
@@ -541,7 +655,7 @@ function ModelSourceEditor({
           className="w-full rounded-lg bg-ink/50 border border-bone/10 px-3 py-2 text-xs text-bone"
           value={source.path}
           onChange={e => onChange({ type: 'builtin', path: e.target.value })}
-          placeholder="/models/..."
+          placeholder={acceptImages ? '/images/parts/dragon.webp' : '/models/...'}
         />
       )}
       {source.type === 'url' && (
@@ -555,10 +669,10 @@ function ModelSourceEditor({
       {source.type === 'blob' && (
         <div className="flex items-center gap-2">
           <label className="cursor-pointer text-xs text-jc-gold border border-jc-gold/30 px-3 py-1.5 rounded-lg hover:bg-jc-gold/10">
-            {uploading ? 'Uploading…' : 'Upload .glb'}
+            {uploading ? 'Uploading…' : acceptImages ? 'Upload image' : 'Upload .glb'}
             <input
               type="file"
-              accept=".glb,.gltf"
+              accept={acceptImages ? '.png,.jpg,.jpeg,.webp,.svg' : '.glb,.gltf'}
               className="hidden"
               disabled={uploading}
               onChange={e => {

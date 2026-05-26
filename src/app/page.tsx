@@ -46,33 +46,36 @@ function HomeContent() {
 
         <div className="relative -mt-screen">
           <section className="relative h-screen w-full flex items-center justify-center px-6 z-10 pointer-events-none">
-            <div
-              aria-hidden
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                background:
-                  'radial-gradient(ellipse 55% 45% at center, rgba(6,6,10,0.7) 0%, rgba(6,6,10,0.35) 45%, transparent 75%)',
-              }}
-            />
-            <div className="relative text-center max-w-3xl">
-              <p className="text-xs tracking-[0.4em] uppercase text-jc-gold/90 animate-fade-in">
+            <div className="relative text-center max-w-3xl mx-auto">
+              <p
+                className="text-xs tracking-[0.4em] uppercase text-jc-gold/90 animate-fade-in"
+                style={{ textShadow: '0 1px 12px rgba(0,0,0,0.9), 0 0 40px rgba(0,0,0,0.65)' }}
+              >
                 {content.hero.eyebrow}
               </p>
               <h1
                 className="font-display text-6xl md:text-8xl lg:text-9xl mt-6 leading-[0.95] animate-fade-up"
-                style={{ textShadow: '0 2px 32px rgba(0,0,0,0.85)' }}
+                style={{ textShadow: '0 2px 28px rgba(0,0,0,0.92), 0 0 48px rgba(0,0,0,0.75)' }}
               >
                 <span className="block text-bone">{content.hero.titleLine1}</span>
-                <span className="block gold-text">{content.hero.titleLine2}</span>
+                <span
+                  className="block gold-text"
+                  style={{ filter: 'drop-shadow(0 2px 20px rgba(0,0,0,0.85))' }}
+                >
+                  {content.hero.titleLine2}
+                </span>
               </h1>
               <p
-                className="mt-8 text-bone/80 max-w-xl mx-auto font-light text-base md:text-lg animate-fade-up"
-                style={{ animationDelay: '0.2s', textShadow: '0 1px 16px rgba(0,0,0,0.85)' }}
+                className="mt-8 text-bone/90 max-w-xl mx-auto font-light text-base md:text-lg leading-relaxed animate-fade-up"
+                style={{
+                  animationDelay: '0.2s',
+                  textShadow: '0 1px 14px rgba(0,0,0,0.9), 0 0 32px rgba(0,0,0,0.6)',
+                }}
               >
                 {content.hero.body}
               </p>
               <div
-                className="mt-16 text-xs tracking-[0.3em] uppercase text-bone/50 animate-fade-up"
+                className="mt-14 text-xs tracking-[0.3em] uppercase text-bone/55 animate-fade-up"
                 style={{ animationDelay: '0.6s' }}
               >
                 {content.hero.scrollHint}

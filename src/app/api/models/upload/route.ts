@@ -3,7 +3,9 @@ import { deleteModelBlob, modelApiUrl, saveModelBlob } from '@/lib/modelBlobs';
 
 export const runtime = 'nodejs';
 
-const MAX_BYTES = 80 * 1024 * 1024;
+const MAX_GLB_BYTES = 80 * 1024 * 1024;
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+const IMAGE_EXT = /\.(png|jpe?g|webp|svg|gif|avif)$/i;
 
 export async function DELETE(req: Request) {
   const denied = assertSceneSettingsAdmin(req);
@@ -38,15 +40,23 @@ export async function POST(req: Request) {
     if (!(file instanceof File)) {
       return Response.json({ error: 'Missing file' }, { status: 400 });
     }
-    if (file.size > MAX_BYTES) {
-      return Response.json({ error: 'File too large (max 80 MB)' }, { status: 413 });
+    const isImage = IMAGE_EXT.test(file.name) || IMAGE_EXT.test(slot);
+    const maxBytes = isImage ? MAX_IMAGE_BYTES : MAX_GLB_BYTES;
+    if (file.size > maxBytes) {
+      return Response.json(
+        { error: isImage ? 'Image too large (max 8 MB)' : 'File too large (max 80 MB)' },
+        { status: 413 },
+      );
     }
 
-    await saveModelBlob(slot, await file.arrayBuffer());
+    const ext = file.name.split('.').pop()?.toLowerCase();
+    const slotWithExt =
+      isImage && ext && !IMAGE_EXT.test(slot) ? `${slot}.${ext}` : slot;
+    await saveModelBlob(slotWithExt, await file.arrayBuffer(), file.type || undefined);
 
     return Response.json({
-      slot,
-      url: modelApiUrl(slot),
+      slot: slotWithExt,
+      url: modelApiUrl(slotWithExt),
       size: file.size,
     });
   } catch (err) {

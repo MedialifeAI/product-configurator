@@ -1,4 +1,4 @@
-import { getModelBlob } from '@/lib/modelBlobs';
+import { blobContentType, getModelBlob } from '@/lib/modelBlobs';
 
 export const runtime = 'nodejs';
 
@@ -18,7 +18,7 @@ export async function GET(
     }
     return new Response(data, {
       headers: {
-        'Content-Type': 'model/gltf-binary',
+        'Content-Type': blobContentType(slot),
         'Cache-Control': 'public, max-age=300',
       },
     });

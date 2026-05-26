@@ -1,8 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useSiteConfig } from '@/context/SiteConfigProvider';
 
 export default function SiteHeader() {
+  const { config } = useSiteConfig();
+  const { header } = config.content;
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -20,19 +23,20 @@ export default function SiteHeader() {
     >
       <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between">
         <a href="#" className="font-display text-xl md:text-2xl tracking-wider gold-text">
-          JACOB &amp; CO
+          {header.brand}
         </a>
         <nav className="hidden md:flex items-center gap-10 text-xs tracking-[0.25em] uppercase text-bone/80">
-          <a href="#story"        className="hover:text-jc-gold transition">The Dragon</a>
-          <a href="#configurator" className="hover:text-jc-gold transition">Configurator</a>
-          <a href="#specs"        className="hover:text-jc-gold transition">Specifications</a>
-          <a href="#inquire"      className="hover:text-jc-gold transition">Inquire</a>
+          {header.nav.map(link => (
+            <a key={link.href} href={link.href} className="hover:text-jc-gold transition">
+              {link.label}
+            </a>
+          ))}
         </nav>
         <a
-          href="#inquire"
+          href={header.ctaHref}
           className="text-xs tracking-[0.25em] uppercase border border-jc-gold/40 text-bone px-5 py-2 rounded-full hover:bg-jc-gold/10 transition"
         >
-          Reserve
+          {header.ctaLabel}
         </a>
       </div>
     </header>

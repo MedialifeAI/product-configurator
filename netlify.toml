@@ -15,6 +15,9 @@
 [[plugins]]
   package = "@netlify/plugin-nextjs"
 
+# Netlify Database migrations: netlify/database/migrations/
+# Applied automatically on each deploy (production + previews).
+
 # Long-lived cache for GLB / HDR / WebP assets — they are content-hashed
 # upstream (Draco-compressed) and never change in place.
 [[headers]]

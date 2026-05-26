@@ -1,34 +1,81 @@
 'use client';
 
 import { ChangeEvent, useState } from 'react';
-import { useSceneSettings } from '@/context/SceneSettings';
+import { useSceneSettings, type PersistStatus } from '@/context/SceneSettings';
+import {
+  ADMIN_TOKEN_STORAGE_KEY,
+  SCENE_SETTINGS_API,
+  adminHeaders,
+  type ModelSlot,
+} from '@/lib/sceneSettingsShared';
 
 /**
- * Floating bottom-right control surface. Lets the operator tune the 3D scene
- * in-place: scale, animation baseline, sway, and even swap in a different GLB
- * via file upload. Persistence is in-memory only — refreshing the page resets
- * to defaults, which is the intent.
+ * Operator panel — scene tuning persisted to Netlify Database (site-wide).
+ * GLB overrides upload to Netlify Blobs and are served from /api/scene-settings/model/:slot.
  */
 export default function DebugSettings() {
-  const { settings, set, reset } = useSceneSettings();
+  const { settings, set, reset, persistStatus, lastSavedAt } = useSceneSettings();
   const [open, setOpen] = useState(true);
+  const [uploading, setUploading] = useState<ModelSlot | null>(null);
+  const [adminToken, setAdminToken] = useState('');
+  const [showToken, setShowToken] = useState(false);
+
+  const saveToken = () => {
+    if (adminToken.trim()) {
+      sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, adminToken.trim());
+    } else {
+      sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    }
+    setShowToken(false);
+  };
+
+  const uploadModel = async (slot: ModelSlot, file: File) => {
+    setUploading(slot);
+    try {
+      const form = new FormData();
+      form.set('slot', slot);
+      form.set('file', file);
+      const res = await fetch(`${SCENE_SETTINGS_API}/upload`, {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: form,
+      });
+      if (res.status === 401) {
+        setShowToken(true);
+        return;
+      }
+      if (!res.ok) throw new Error('upload failed');
+      const { url } = await res.json();
+      const key = slot === 'hero' ? 'heroModelUrl' : 'configModelUrl';
+      set(key, url as string);
+    } finally {
+      setUploading(null);
+    }
+  };
 
   const onFile =
-    (which: 'heroModelUrl' | 'configModelUrl') =>
+    (slot: ModelSlot) =>
     (e: ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
       if (!file) return;
-      // Revoke the previous blob URL so we don't leak memory across uploads.
-      const previous = settings[which];
-      if (previous && previous.startsWith('blob:')) URL.revokeObjectURL(previous);
-      set(which, URL.createObjectURL(file));
+      const key = slot === 'hero' ? 'heroModelUrl' : 'configModelUrl';
+      const previous = settings[key];
+      if (previous?.startsWith('blob:')) URL.revokeObjectURL(previous);
+      void uploadModel(slot, file);
       e.target.value = '';
     };
 
-  const clear = (which: 'heroModelUrl' | 'configModelUrl') => () => {
-    const previous = settings[which];
-    if (previous && previous.startsWith('blob:')) URL.revokeObjectURL(previous);
-    set(which, null);
+  const clear = (slot: ModelSlot) => async () => {
+    const key = slot === 'hero' ? 'heroModelUrl' : 'configModelUrl';
+    const previous = settings[key];
+    if (previous?.startsWith('blob:')) URL.revokeObjectURL(previous);
+    if (previous?.startsWith('/api/scene-settings/model/')) {
+      await fetch(`${SCENE_SETTINGS_API}/upload?slot=${slot}`, {
+        method: 'DELETE',
+        headers: adminHeaders(),
+      });
+    }
+    set(key, null);
   };
 
   if (!open) {
@@ -47,7 +94,7 @@ export default function DebugSettings() {
 
   return (
     <div className="fixed bottom-4 right-4 z-[60] w-[340px] glass rounded-2xl p-4 text-bone text-xs shadow-2xl">
-      <div className="flex justify-between items-center mb-3">
+      <div className="flex justify-between items-center mb-2">
         <span className="font-display text-sm text-jc-gold tracking-wider">Scene controls</span>
         <button
           type="button"
@@ -59,7 +106,31 @@ export default function DebugSettings() {
         </button>
       </div>
 
-      <div className="space-y-4 max-h-[70vh] overflow-y-auto pr-1">
+      <PersistBadge status={persistStatus} lastSavedAt={lastSavedAt} />
+
+      {showToken && (
+        <div className="mb-3 p-2 rounded-lg border border-jc-gold/30 bg-ink/40 space-y-2">
+          <p className="text-[10px] text-bone/60 leading-relaxed">
+            Set the admin token from Netlify env <code className="text-jc-gold/80">SCENE_SETTINGS_ADMIN_TOKEN</code> to save changes.
+          </p>
+          <input
+            type="password"
+            value={adminToken}
+            onChange={e => setAdminToken(e.target.value)}
+            placeholder="Admin token"
+            className="w-full rounded-md bg-ink/60 border border-bone/15 px-2 py-1.5 text-bone text-[11px]"
+          />
+          <button
+            type="button"
+            onClick={saveToken}
+            className="w-full rounded-md border border-jc-gold/40 text-jc-gold py-1.5 hover:bg-jc-gold/10"
+          >
+            Save token
+          </button>
+        </div>
+      )}
+
+      <div className="space-y-4 max-h-[65vh] overflow-y-auto pr-1">
         <Section title="Hero">
           <Slider label="Scale" value={settings.heroScale} min={0.3} max={2.5} step={0.05}
                   onChange={v => set('heroScale', v)} />
@@ -74,8 +145,9 @@ export default function DebugSettings() {
 
           <FileRow label="Replace hero model"
                    filledUrl={settings.heroModelUrl}
-                   onFile={onFile('heroModelUrl')}
-                   onClear={clear('heroModelUrl')} />
+                   uploading={uploading === 'hero'}
+                   onFile={onFile('hero')}
+                   onClear={() => void clear('hero')()} />
         </Section>
 
         <Section title="Hero · Lighting">
@@ -103,21 +175,70 @@ export default function DebugSettings() {
 
           <FileRow label="Replace configurator model"
                    filledUrl={settings.configModelUrl}
-                   onFile={onFile('configModelUrl')}
-                   onClear={clear('configModelUrl')}
-                   hint="Replaces the assembled watch with a single GLB (variant pickers will not affect it)" />
+                   uploading={uploading === 'config'}
+                   onFile={onFile('config')}
+                   onClear={() => void clear('config')()}
+                   hint="Stored in Netlify Blobs; shared across visits" />
         </Section>
 
-        <button
-          type="button"
-          onClick={reset}
-          className="w-full glass-gold-edge rounded-lg py-2 text-jc-gold hover:bg-jc-gold/10 transition"
-        >
-          Reset all
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={reset}
+            className="flex-1 glass-gold-edge rounded-lg py-2 text-jc-gold hover:bg-jc-gold/10 transition"
+          >
+            Reset all
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowToken(v => !v)}
+            className="px-3 rounded-lg border border-bone/15 text-bone/50 hover:text-bone hover:border-bone/30"
+            title="Admin token for saving"
+          >
+            🔑
+          </button>
+        </div>
       </div>
     </div>
   );
+}
+
+function PersistBadge({
+  status,
+  lastSavedAt,
+}: {
+  status: PersistStatus;
+  lastSavedAt: string | null;
+}) {
+  const label: Record<PersistStatus, string> = {
+    idle: '—',
+    loading: 'Loading saved settings…',
+    ready: 'Synced with Netlify',
+    saving: 'Saving…',
+    saved: lastSavedAt ? `Saved ${formatTime(lastSavedAt)}` : 'Saved',
+    error: 'Save failed — check admin token',
+    offline: 'Local only (run netlify dev or deploy)',
+  };
+  const tone =
+    status === 'error'
+      ? 'text-red-300/80'
+      : status === 'offline'
+        ? 'text-bone/40'
+        : 'text-jc-gold/70';
+
+  return (
+    <div className={`text-[10px] tracking-[0.15em] uppercase mb-3 ${tone}`}>
+      {label[status]}
+    </div>
+  );
+}
+
+function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return '';
+  }
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -163,25 +284,28 @@ function Slider({
 }
 
 function FileRow({
-  label, filledUrl, onFile, onClear, hint,
+  label, filledUrl, uploading, onFile, onClear, hint,
 }: {
   label: string;
   filledUrl: string | null;
+  uploading?: boolean;
   onFile: (e: ChangeEvent<HTMLInputElement>) => void;
   onClear: () => void;
   hint?: string;
 }) {
+  const isStored = filledUrl?.startsWith('/api/scene-settings/model/');
   return (
     <div>
       <div className="text-bone/70 mb-1">{label}</div>
       <div className="flex items-center gap-2">
         <label className="flex-1 cursor-pointer rounded-md border border-bone/15 hover:border-bone/40 px-2 py-1.5 text-bone/70 text-[11px] transition">
-          {filledUrl ? 'Replace…' : 'Choose .glb…'}
+          {uploading ? 'Uploading…' : filledUrl ? 'Replace…' : 'Choose .glb…'}
           <input
             type="file"
             accept=".glb,.gltf"
             onChange={onFile}
             className="hidden"
+            disabled={uploading}
           />
         </label>
         {filledUrl && (
@@ -194,6 +318,9 @@ function FileRow({
           </button>
         )}
       </div>
+      {isStored && (
+        <div className="text-[10px] text-jc-gold/50 mt-1">Stored on Netlify</div>
+      )}
       {hint && <div className="text-[10px] text-bone/40 mt-1">{hint}</div>}
     </div>
   );

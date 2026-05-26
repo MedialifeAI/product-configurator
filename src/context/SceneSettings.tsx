@@ -1,36 +1,37 @@
 'use client';
 
-import { createContext, useCallback, useContext, useMemo, useState } from 'react';
+import {
+  adminHeaders,
+  mergeWithDefaults,
+  SCENE_SETTINGS_API,
+  toPersistedPayload,
+} from '@/lib/sceneSettingsShared';
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { ReactNode } from 'react';
 
 export interface SceneSettings {
-  /** Multiplier on the bbox-derived hero scale. 1.0 = computed default. */
   heroScale: number;
-  /** Added to the raw scrollProgress before driving the explode (0..1). */
   heroAnimOffset: number;
-  /** Vertical world-space offset of the hero watch group. */
   heroY: number;
-  /** Sway amplitude in radians for the hero showcase rotation. */
   heroSway: number;
-
-  /** Multiplier on the bbox-derived configurator scale. */
   configScale: number;
-  /** Configurator OrbitControls autoRotateSpeed. */
   configRotate: number;
-
-  /** Optional override URL for the hero model (blob URL from file upload). */
   heroModelUrl: string | null;
-  /** Optional override URL for the configurator base model. */
   configModelUrl: string | null;
-
-  // Hero lighting (intensity-style). Defaults already trimmed 10% from the
-  // tuned values — the rose gold case kept reading hot against the headline.
-  heroAmbient: number;   // ambient fill
-  heroKey: number;       // upper-front-left key (warm white)
-  heroRim: number;       // back-left rim (warm gold)
-  heroKicker: number;    // lower-front cool kicker
-  heroEnv: number;       // studio HDR environmentIntensity
-  heroExposure: number;  // toneMappingExposure
+  heroAmbient: number;
+  heroKey: number;
+  heroRim: number;
+  heroKicker: number;
+  heroEnv: number;
+  heroExposure: number;
 }
 
 export const DEFAULT_SETTINGS: SceneSettings = {
@@ -42,31 +43,105 @@ export const DEFAULT_SETTINGS: SceneSettings = {
   configRotate: 0.5,
   heroModelUrl: null,
   configModelUrl: null,
-
-  // ×0.9 of the previously tuned values.
-  heroAmbient:  0.108,
-  heroKey:      0.63,
-  heroRim:      0.45,
-  heroKicker:   0.18,
-  heroEnv:      0.315,
+  heroAmbient: 0.108,
+  heroKey: 0.63,
+  heroRim: 0.45,
+  heroKicker: 0.18,
+  heroEnv: 0.315,
   heroExposure: 0.738,
 };
+
+export type PersistStatus = 'idle' | 'loading' | 'ready' | 'saving' | 'saved' | 'error' | 'offline';
 
 interface Ctx {
   settings: SceneSettings;
   set: <K extends keyof SceneSettings>(key: K, value: SceneSettings[K]) => void;
   reset: () => void;
+  persistStatus: PersistStatus;
+  lastSavedAt: string | null;
 }
 
 const SceneSettingsContext = createContext<Ctx | null>(null);
 
+const SAVE_DEBOUNCE_MS = 900;
+
 export function SceneSettingsProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<SceneSettings>(DEFAULT_SETTINGS);
+  const [persistStatus, setPersistStatus] = useState<PersistStatus>('loading');
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
+  const hydrated = useRef(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const persist = useCallback(async (next: SceneSettings) => {
+    setPersistStatus('saving');
+    try {
+      const res = await fetch(SCENE_SETTINGS_API, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...adminHeaders() },
+        body: JSON.stringify({ settings: toPersistedPayload(next) }),
+      });
+      if (res.status === 401) {
+        setPersistStatus('error');
+        return;
+      }
+      if (!res.ok) throw new Error(`save ${res.status}`);
+      const data = await res.json();
+      setLastSavedAt(data.updatedAt ?? null);
+      setPersistStatus('saved');
+    } catch {
+      setPersistStatus('error');
+    }
+  }, []);
+
+  const scheduleSave = useCallback(
+    (next: SceneSettings) => {
+      if (saveTimer.current) clearTimeout(saveTimer.current);
+      saveTimer.current = setTimeout(() => persist(next), SAVE_DEBOUNCE_MS);
+    },
+    [persist],
+  );
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(SCENE_SETTINGS_API);
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.settings) {
+          setSettings(mergeWithDefaults(data.settings));
+          setLastSavedAt(data.updatedAt ?? null);
+        }
+        setPersistStatus(data.unavailable ? 'offline' : 'ready');
+      } catch {
+        if (!cancelled) setPersistStatus('offline');
+      } finally {
+        if (!cancelled) hydrated.current = true;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated.current) return;
+    scheduleSave(settings);
+  }, [settings, scheduleSave]);
+
   const set = useCallback(<K extends keyof SceneSettings>(key: K, value: SceneSettings[K]) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   }, []);
-  const reset = useCallback(() => setSettings(DEFAULT_SETTINGS), []);
-  const value = useMemo(() => ({ settings, set, reset }), [settings, set, reset]);
+
+  const reset = useCallback(() => {
+    setSettings(DEFAULT_SETTINGS);
+  }, []);
+
+  const value = useMemo(
+    () => ({ settings, set, reset, persistStatus, lastSavedAt }),
+    [settings, set, reset, persistStatus, lastSavedAt],
+  );
+
   return (
     <SceneSettingsContext.Provider value={value}>{children}</SceneSettingsContext.Provider>
   );

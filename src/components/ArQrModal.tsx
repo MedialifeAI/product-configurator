@@ -1,5 +1,8 @@
 'use client';
 
+import { isMobileArDevice } from '@/lib/ar';
+import { useBodyScrollLock } from '@/hooks/useBodyScrollLock';
+import { useEscapeKey } from '@/hooks/useEscapeKey';
 import { useEffect, useState } from 'react';
 
 interface ArQrModalProps {
@@ -11,13 +14,15 @@ interface ArQrModalProps {
 }
 
 /**
- * Desktop fallback for AR: shows a styled QR code that the user scans with a
- * phone camera. The handoff URL re-opens the configurator with `?ar=1` so the
- * mobile session jumps straight into the AR view.
+ * Desktop AR handoff: QR code + copy link. Scanning opens the configurator with
+ * `?ar=1` so the phone jumps straight into Model Viewer AR.
  */
 export default function ArQrModal({ url, configLabel, onClose }: ArQrModalProps) {
-  const [svg, setSvg] = useState<string>('');
+  const [svg, setSvg] = useState('');
   const [copied, setCopied] = useState(false);
+
+  useBodyScrollLock(true);
+  useEscapeKey(onClose);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,11 +30,16 @@ export default function ArQrModal({ url, configLabel, onClose }: ArQrModalProps)
       QRCode.toString(url, {
         type: 'svg',
         margin: 1,
+        width: 280,
         color: { dark: '#f1d9a4', light: '#0a0a0c' },
         errorCorrectionLevel: 'M',
-      }).then(out => { if (!cancelled) setSvg(out); });
+      }).then(out => {
+        if (!cancelled) setSvg(out);
+      });
     });
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, [url]);
 
   const copyUrl = async () => {
@@ -37,7 +47,15 @@ export default function ArQrModal({ url, configLabel, onClose }: ArQrModalProps)
       await navigator.clipboard.writeText(url);
       setCopied(true);
       setTimeout(() => setCopied(false), 1800);
-    } catch { /* clipboard blocked — no-op */ }
+    } catch {
+      /* clipboard blocked */
+    }
+  };
+
+  const openOnPhone = () => {
+    if (isMobileArDevice()) {
+      window.location.assign(url);
+    }
   };
 
   return (
@@ -70,8 +88,8 @@ export default function ArQrModal({ url, configLabel, onClose }: ArQrModalProps)
         </div>
 
         <p className="text-bone/70 text-sm leading-relaxed mb-6">
-          Scan with your phone&apos;s camera to open the Astronomia Dragon in augmented reality.
-          Hold steady, find a flat surface, and place it wherever you&apos;d like to wear it.
+          Scan with your phone&apos;s camera to open this configuration in augmented reality.
+          Find a flat surface, then use the AR button to place the Astronomia Dragon in your room.
         </p>
 
         <div className="bg-ink/60 border border-jc-gold/20 rounded-2xl p-5 flex items-center justify-center min-h-[280px]">
@@ -79,6 +97,8 @@ export default function ArQrModal({ url, configLabel, onClose }: ArQrModalProps)
             <div
               className="w-[240px] h-[240px] [&>svg]:w-full [&>svg]:h-full"
               dangerouslySetInnerHTML={{ __html: svg }}
+              role="img"
+              aria-label="QR code to open AR on your phone"
             />
           ) : (
             <div className="text-bone/40 text-xs tracking-[0.3em] uppercase">Generating…</div>
@@ -91,7 +111,12 @@ export default function ArQrModal({ url, configLabel, onClose }: ArQrModalProps)
           </div>
         )}
 
-        <div className="mt-6 flex items-center justify-between gap-3">
+        <p className="mt-4 text-center text-[10px] text-bone/40 leading-relaxed">
+          Android opens Scene Viewer · iPhone uses Quick Look when a USDZ is provided ·
+          supported browsers can use WebXR
+        </p>
+
+        <div className="mt-6 flex flex-col sm:flex-row items-stretch gap-3">
           <button
             type="button"
             onClick={copyUrl}
@@ -99,6 +124,18 @@ export default function ArQrModal({ url, configLabel, onClose }: ArQrModalProps)
           >
             {copied ? 'Link copied' : 'Copy link'}
           </button>
+          {isMobileArDevice() && (
+            <a
+              href={url}
+              className="flex-1 text-center text-xs text-jc-gold border border-jc-gold/40 hover:bg-jc-gold/10 rounded-lg py-2 transition"
+              onClick={e => {
+                e.preventDefault();
+                openOnPhone();
+              }}
+            >
+              Open AR now
+            </a>
+          )}
           <button
             type="button"
             onClick={onClose}

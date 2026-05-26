@@ -22,12 +22,24 @@ import { Suspense, useEffect, useMemo, useState } from 'react';
 import * as THREE from 'three';
 import type { SceneSettings } from '@/context/SceneSettings';
 import { DEFAULT_SETTINGS } from '@/context/SceneSettings';
+import {
+  AR_MODEL_GLB,
+  buildArHandoffUrl,
+  isMobileArDevice,
+  parseArSearchParams,
+  scrollToConfigurator,
+  stripArParamsFromUrl,
+  type DragonId,
+  type MetalId,
+} from '@/lib/ar';
 
 // The AR view bundles @google/model-viewer (~150KB) — load only when invoked.
 const ArView     = dynamic(() => import('./ArView'),     { ssr: false });
 const ArQrModal  = dynamic(() => import('./ArQrModal'),  { ssr: false });
 
-const AR_MODEL_URL = '/models/full_watch/watch_full_default.glb';
+/** Hero GLB used in AR — matches the default configurator selection (v1 · rose gold). */
+const AR_DEFAULT_DRAGON: DragonId = 'v1';
+const AR_DEFAULT_METAL: MetalId = 'rose_gold';
 
 useGLTF.setDecoderPath?.('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
 
@@ -35,8 +47,6 @@ useGLTF.setDecoderPath?.('https://www.gstatic.com/draco/versioned/decoders/1.5.7
 // Variant catalogues — kept here for easy authoring/extension
 // ============================================================
 
-type DragonId   = 'v1' | 'v2' | 'v3' | 'v4';
-type MetalId    = 'rose_gold' | 'white_gold' | 'yellow_gold';
 type ComponentId = 'dragon' | 'case' | 'movement' | 'dial' | 'globe' | 'strap';
 
 const DRAGON_VARIANTS: { id: DragonId; label: string; sub: string; swatch: string; url: string }[] = [
@@ -165,53 +175,67 @@ export default function Configurator({ id, settings = DEFAULT_SETTINGS }: Config
   // AR — null = closed; 'ar' = fullscreen model-viewer; 'qr' = desktop handoff
   const [arMode, setArMode] = useState<null | 'ar' | 'qr'>(null);
   const [arUrl, setArUrl] = useState<string>('');
+  const [mobileAr, setMobileAr] = useState(false);
 
   const dragonLabel = DRAGON_VARIANTS.find(d => d.id === dragon)?.label;
   const metalLabel  = METAL_VARIANTS.find(m => m.id === metal)?.label;
   const configLabel = `${dragonLabel} · ${metalLabel}`;
 
-  // Honour mobile handoffs that arrive with ?ar=1[&dragon=...&metal=...]
+  const arVariantDiffers =
+    dragon !== AR_DEFAULT_DRAGON || metal !== AR_DEFAULT_METAL;
+  const arVariantNote = arVariantDiffers
+    ? 'AR uses the assembled hero model; your dragon and metal choices are applied in the configurator when you close this view.'
+    : undefined;
+
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('ar') !== '1') return;
-    const d = params.get('dragon') as DragonId | null;
-    const m = params.get('metal')  as MetalId  | null;
-    if (d && DRAGON_VARIANTS.some(v => v.id === d)) setDragon(d);
-    if (m && METAL_VARIANTS.some(v => v.id === m))  setMetal(m);
-    setArMode('ar');
+    setMobileAr(isMobileArDevice());
   }, []);
 
-  const handleArClick = () => {
-    if (typeof window === 'undefined') return;
-    const isMobile =
-      /Android|iPhone|iPad|iPod/i.test(navigator.userAgent) ||
-      (navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform));
+  // Warm the AR GLB while the configurator is visible (large file, first open is slow).
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const link = document.createElement('link');
+    link.rel = 'preload';
+    link.as = 'fetch';
+    link.href = AR_MODEL_GLB;
+    link.crossOrigin = 'anonymous';
+    document.head.appendChild(link);
+    return () => {
+      document.head.removeChild(link);
+    };
+  }, []);
 
-    if (isMobile) {
+  const openArHandoff = (config: { dragon: DragonId; metal: MetalId }) => {
+    if (typeof window === 'undefined') return;
+    if (isMobileArDevice()) {
       setArMode('ar');
       return;
     }
-    // Desktop: build the handoff URL the phone will scan
-    const u = new URL(window.location.href);
-    u.search = '';
-    u.searchParams.set('ar', '1');
-    u.searchParams.set('dragon', dragon);
-    u.searchParams.set('metal',  metal);
-    u.hash = '#configurator';
-    setArUrl(u.toString());
+    setArUrl(buildArHandoffUrl(window.location.href, config));
     setArMode('qr');
+  };
+
+  // Honour ?ar=1[&dragon=...&metal=...] from QR / shared links
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const { openAr, dragon: d, metal: m } = parseArSearchParams(window.location.search);
+    if (!openAr) return;
+    if (d) setDragon(d);
+    if (m) setMetal(m);
+    scrollToConfigurator();
+    const config = { dragon: d ?? dragon, metal: m ?? metal };
+    openArHandoff(config);
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount for URL handoff
+  }, []);
+
+  const handleArClick = () => {
+    openArHandoff({ dragon, metal });
   };
 
   const closeAr = () => {
     setArMode(null);
-    // Strip ?ar=1 from the URL so refresh doesn't re-open AR.
     if (typeof window !== 'undefined' && window.location.search.includes('ar=')) {
-      const u = new URL(window.location.href);
-      u.searchParams.delete('ar');
-      u.searchParams.delete('dragon');
-      u.searchParams.delete('metal');
-      window.history.replaceState({}, '', u.toString());
+      window.history.replaceState({}, '', stripArParamsFromUrl(window.location.href));
     }
   };
 
@@ -395,7 +419,7 @@ export default function Configurator({ id, settings = DEFAULT_SETTINGS }: Config
                 </span>
               </button>
               <div className="mt-2 text-center text-[10px] text-bone/40 tracking-[0.2em] uppercase">
-                On desktop · scan to your phone
+                {mobileAr ? 'Opens Google Model Viewer AR' : 'On desktop · scan QR to your phone'}
               </div>
             </div>
           </div>
@@ -404,8 +428,10 @@ export default function Configurator({ id, settings = DEFAULT_SETTINGS }: Config
 
       {arMode === 'ar' && (
         <ArView
-          src={AR_MODEL_URL}
+          src={AR_MODEL_GLB}
           alt={`Astronomia Dragon — ${configLabel}`}
+          configLabel={configLabel}
+          variantNote={arVariantNote}
           onClose={closeAr}
           autoActivate
         />

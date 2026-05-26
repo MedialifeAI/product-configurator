@@ -5,16 +5,21 @@
   "description": "Scroll-driven 3D landing page + configurator for the Jacob & Co Astronomia Dragon",
   "scripts": {
     "dev": "next dev",
+    "dev:netlify": "netlify dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "compress": "bash scripts/compress.sh"
   },
   "dependencies": {
+    "@google/model-viewer": "^4.2.0",
+    "@netlify/blobs": "^10.7.8",
+    "@netlify/database": "^1.0.0",
     "@react-three/drei": "^9.114.0",
     "@react-three/fiber": "^8.17.10",
     "framer-motion": "^11.11.0",
     "next": "14.2.15",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "three": "^0.169.0"

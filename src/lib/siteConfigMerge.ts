@@ -44,7 +44,11 @@ function deepMergeContent(
     ...base,
     ...patch,
     meta: { ...base.meta, ...patch.meta },
-    header: { ...base.header, ...patch.header, nav: patch.nav ?? base.nav },
+    header: {
+      ...base.header,
+      ...patch.header,
+      nav: patch.header?.nav ?? base.header.nav,
+    },
     hero: { ...base.hero, ...patch.hero },
     storyPanels: patch.storyPanels ?? base.storyPanels,
     configurator: { ...base.configurator, ...patch.configurator },

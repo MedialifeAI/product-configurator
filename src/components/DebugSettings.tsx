@@ -1,7 +1,8 @@
 'use client';
 
 import { ChangeEvent, useState } from 'react';
-import { useSceneSettings, type PersistStatus } from '@/context/SceneSettings';
+import { useSceneSettings, useSiteConfig, type PersistStatus } from '@/context/SceneSettings';
+import type { ArSettings } from '@/lib/siteConfigTypes';
 import {
   ADMIN_TOKEN_STORAGE_KEY,
   SCENE_SETTINGS_API,
@@ -15,6 +16,10 @@ import {
  */
 export default function DebugSettings() {
   const { settings, set, reset, persistStatus, lastSavedAt } = useSceneSettings();
+  const { config, patchConfig, saveConfig } = useSiteConfig();
+  const ar = config.ar;
+  const setAr = <K extends keyof ArSettings>(key: K, value: ArSettings[K]) =>
+    patchConfig({ ar: { ...ar, [key]: value } });
   const [open, setOpen] = useState(true);
   const [uploading, setUploading] = useState<ModelSlot | null>(null);
   const [adminToken, setAdminToken] = useState('');
@@ -179,6 +184,32 @@ export default function DebugSettings() {
                    onFile={onFile('config')}
                    onClear={() => void clear('config')()}
                    hint="Stored in Netlify Blobs; shared across visits" />
+        </Section>
+
+        <Section title="AR (Model Viewer)">
+          <Slider label="Case diameter (mm)" value={ar.caseDiameterMm} min={40} max={55} step={1}
+                  onChange={v => setAr('caseDiameterMm', v)} />
+          <Slider label="AR size multiplier" value={ar.sizeMultiplier} min={0.9} max={1.5} step={0.02}
+                  onChange={v => setAr('sizeMultiplier', v)}
+                  hint="1.22 ≈ 20% larger than true scale" />
+          <Slider label="Preview scale" value={ar.previewScale} min={0.8} max={1.3} step={0.02}
+                  onChange={v => setAr('previewScale', v)} />
+          <label className="flex items-center gap-2 text-bone/70 text-[11px] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={ar.lockRealWorldScale}
+              onChange={e => setAr('lockRealWorldScale', e.target.checked)}
+              className="accent-[#b4904e]"
+            />
+            Lock real-world scale in AR
+          </label>
+          <button
+            type="button"
+            onClick={() => void saveConfig()}
+            className="w-full rounded-lg border border-jc-gold/30 text-jc-gold/90 py-2 text-[11px] uppercase tracking-[0.2em] hover:bg-jc-gold/10"
+          >
+            Save AR settings to Netlify
+          </button>
         </Section>
 
         <div className="flex gap-2">

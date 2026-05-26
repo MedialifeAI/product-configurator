@@ -1,35 +1,18 @@
-import { getDeployStore, getStore } from '@netlify/blobs';
+/** @deprecated Use @/lib/modelBlobs — legacy hero/config slot names */
+import { deleteModelBlob as del, getModelBlob as get, saveModelBlob as save } from '@/lib/modelBlobs';
 import type { ModelSlot } from '@/lib/sceneSettingsShared';
 
-const STORE_NAME = 'jacobco-scene-models';
+const LEGACY_KEYS: Record<ModelSlot, string> = {
+  hero: 'hero-watch',
+  config: 'config-assembly',
+};
 
-function blobKey(slot: ModelSlot): string {
-  return `${slot}.glb`;
+export async function saveModelBlob(slot: ModelSlot, data: ArrayBuffer) {
+  return save(LEGACY_KEYS[slot], data);
 }
-
-function modelStore() {
-  if (process.env.CONTEXT === 'production') {
-    return getStore({ name: STORE_NAME, consistency: 'strong' });
-  }
-  return getDeployStore(STORE_NAME);
+export async function getModelBlob(slot: ModelSlot) {
+  return get(LEGACY_KEYS[slot]);
 }
-
-export async function saveModelBlob(slot: ModelSlot, data: ArrayBuffer): Promise<void> {
-  await modelStore().set(blobKey(slot), data, {
-    metadata: { contentType: 'model/gltf-binary' },
-  });
-}
-
-export async function getModelBlob(slot: ModelSlot): Promise<ArrayBuffer | null> {
-  const data = await modelStore().get(blobKey(slot), { type: 'arrayBuffer' });
-  return data ?? null;
-}
-
-export async function deleteModelBlob(slot: ModelSlot): Promise<void> {
-  await modelStore().delete(blobKey(slot));
-}
-
-export async function modelBlobExists(slot: ModelSlot): Promise<boolean> {
-  const meta = await modelStore().getMetadata(blobKey(slot));
-  return meta !== null;
+export async function deleteModelBlob(slot: ModelSlot) {
+  return del(LEGACY_KEYS[slot]);
 }

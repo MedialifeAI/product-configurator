@@ -20,21 +20,20 @@ import { useEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import type { SceneSettings } from '@/context/SceneSettings';
 import { DEFAULT_SETTINGS } from '@/context/SceneSettings';
+import { heroWatchUrl } from '@/lib/resolveModelUrl';
+import { DEFAULT_CATALOG, type SiteCatalog } from '@/lib/siteConfigTypes';
 
-// Wire Draco for all useGLTF calls — Google CDN, cached forever
 useGLTF.setDecoderPath?.('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
 
-const MODEL_URL = '/models/full_watch/watch_full_default.glb';
-
 interface WatchProps {
-  /** 0..1 scroll progress driving the explode animation */
   scrollProgress: React.MutableRefObject<number>;
   settings: SceneSettings;
+  catalog: SiteCatalog;
 }
 
-function Watch({ scrollProgress, settings }: WatchProps) {
+function Watch({ scrollProgress, settings, catalog }: WatchProps) {
   const group = useRef<THREE.Group>(null);
-  const url = settings.heroModelUrl || MODEL_URL;
+  const url = heroWatchUrl(catalog, settings.heroModelUrl);
   const gltf = useGLTF(url) as any;
   const { actions, mixer } = useAnimations(gltf.animations, group);
 
@@ -167,13 +166,16 @@ interface WatchSceneProps {
   scrollProgress: React.MutableRefObject<number>;
   className?: string;
   settings?: SceneSettings;
+  catalog?: SiteCatalog;
 }
 
 export default function WatchScene({
   scrollProgress,
   className,
   settings = DEFAULT_SETTINGS,
+  catalog,
 }: WatchSceneProps) {
+  const cat = catalog ?? DEFAULT_CATALOG;
   return (
     <div className={className} style={{ width: '100%', height: '100%' }}>
       <Canvas
@@ -192,7 +194,7 @@ export default function WatchScene({
         {/* Studio HDR — drives PBR reflections for the metallic case + dragon.
             Dialed down so the headline copy reads cleanly over the watch. */}
         <Environment preset="studio" environmentIntensity={settings.heroEnv} />
-        <Watch scrollProgress={scrollProgress} settings={settings} />
+        <Watch scrollProgress={scrollProgress} settings={settings} catalog={cat} />
         {/* Subtle product-photography shadow to ground the watch */}
         <ContactShadows
           position={[0, -1.2, 0]}
@@ -206,5 +208,3 @@ export default function WatchScene({
   );
 }
 
-// Preload so the watch is ready by the time the user reaches the hero
-useGLTF.preload(MODEL_URL);

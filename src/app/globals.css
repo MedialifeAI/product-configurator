@@ -1,0 +1,63 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body {
+  background: #0a0a0c;
+  color: #f5f2ea;
+  overscroll-behavior: none;
+}
+
+/* Smooth scroll with momentum */
+html { scroll-behavior: smooth; }
+
+/* Custom scrollbar — keep it minimal & on-brand */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(180, 144, 78, 0.4); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(180, 144, 78, 0.7); }
+
+/* Glassmorphic panel utility */
+.glass {
+  background: linear-gradient(135deg, rgba(21,21,26,0.55) 0%, rgba(10,10,12,0.35) 100%);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(245, 242, 234, 0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(245, 242, 234, 0.06),
+    0 30px 60px -20px rgba(0, 0, 0, 0.6);
+}
+
+.glass-gold-edge {
+  background: linear-gradient(135deg, rgba(21,21,26,0.55) 0%, rgba(10,10,12,0.35) 100%);
+  backdrop-filter: blur(20px) saturate(140%);
+  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  border: 1px solid rgba(180, 144, 78, 0.25);
+  box-shadow:
+    inset 0 1px 0 rgba(180, 144, 78, 0.12),
+    0 30px 60px -20px rgba(0, 0, 0, 0.7);
+}
+
+/* Subtle gold gradient text */
+.gold-text {
+  background: linear-gradient(180deg, #f1d9a4 0%, #b4904e 60%, #8a6a30 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* A faint vignette over the whole page so foreground text reads well */
+.vignette::after {
+  content: '';
+  position: fixed; inset: 0;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 40%, rgba(0,0,0,0.55) 100%);
+  z-index: 5;
+}
+
+/* Section spacing token */
+.section-pad { padding: 8vh 6vw; }
+
+/* The pinned 3D canvas should never receive pointer events except in configurator */
+.canvas-hero { pointer-events: none; }
+.canvas-interactive { pointer-events: auto; }

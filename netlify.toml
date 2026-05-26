@@ -1,0 +1,39 @@
+# Netlify configuration for the Astronomia Dragon configurator (Next.js 14).
+# The official @netlify/plugin-nextjs adapter handles SSR/edge routes,
+# image optimisation, and asset caching for the .next output automatically.
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[build.environment]
+  NODE_VERSION = "20"
+  NPM_FLAGS = "--legacy-peer-deps"
+  # Skip telemetry on Netlify builders — keeps CI logs clean
+  NEXT_TELEMETRY_DISABLED = "1"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
+
+# Long-lived cache for GLB / HDR / WebP assets — they are content-hashed
+# upstream (Draco-compressed) and never change in place.
+[[headers]]
+  for = "/models/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+    # GLBs need the right MIME type for some clients (Scene Viewer, Quick Look)
+    Access-Control-Allow-Origin = "*"
+
+# AR via Quick Look uses the .usdz extension when one is provided alongside.
+[[headers]]
+  for = "/models/*.usdz"
+  [headers.values]
+    Content-Type = "model/vnd.usdz+zip"
+
+# Cross-origin isolation for WebXR is opt-in (not strictly required for
+# Scene Viewer / Quick Look hand-off, but smooths future WebXR support).
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(self), xr-spatial-tracking=(self)"

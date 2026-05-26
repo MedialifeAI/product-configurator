@@ -37,11 +37,14 @@ export function resolveArComboModelUrl(
   catalog: SiteCatalog,
   dragon: DragonId,
   metal: MetalId,
+  ar?: ArSettings,
 ): string {
+  const fallback = arWatchUrl(catalog);
+  if (ar && !ar.usePerComboArModels) return fallback;
   const key = arComboKey(dragon, metal);
   const combo = catalog.arCombos?.[key];
-  if (combo) return resolveSource(combo, arWatchUrl(catalog));
-  return arWatchUrl(catalog);
+  if (combo) return resolveSource(combo, fallback);
+  return fallback;
 }
 
 export type ModelViewerDimensions = { x: number; y: number; z: number };

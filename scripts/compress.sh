@@ -11,8 +11,10 @@
 set -euo pipefail
 export PATH="$HOME/.npm-global/bin:$PATH"
 
-SRC="/sessions/wonderful-eloquent-planck/mnt/Watch parts"
-DST="$SRC/configurator-site/public/models"
+# Override for local Windows/macOS: export WATCH_PARTS_ROOT="/path/to/Watch parts"
+SRC="${WATCH_PARTS_ROOT:-/sessions/wonderful-eloquent-planck/mnt/Watch parts}"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+DST="${CONFIGURATOR_MODELS_DST:-$(cd "$SCRIPT_DIR/.." && pwd)/public/models}"
 
 # Per-file pipeline that preserves geometry + named nodes + animations
 optimize() {
@@ -60,9 +62,11 @@ done
 
 # Static parts
 optimize "$SRC/dial/dial.glb"               "$DST/parts/dial.glb"   "DIAL"
-optimize "$SRC/globe/globe_earth.glb"       "$DST/parts/globe.glb"  "GLOBE"
+for v in rose_gold white_gold yellow_gold; do
+    optimize "$SRC/globe/variants/globe_${v}.glb" "$DST/parts/globe_${v}.glb" "GLOBE ${v}"
+done
 optimize "$SRC/hands/clock_hand_loose.glb"  "$DST/parts/hand.glb"   "HAND"
-optimize "$SRC/strap/strap_blue_alligator.glb" "$DST/parts/strap.glb" "STRAP"
+optimize "$SRC/strap/strap.glb"             "$DST/parts/strap.glb"  "STRAP (top+bottom)"
 
 # Full watch — the hero asset with both NLA animations.
 # 266MB → target ~25-40MB. Keep animations, no simplify, no flatten.

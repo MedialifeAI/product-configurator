@@ -38,11 +38,17 @@ export interface MetalPartSources {
 }
 
 export interface StaticPartSources {
+  /** Celestial dial + inner background plate (`blue-watch-bg-plate`). */
   dial?: ModelSource;
+  /** Default globe when no per-metal entry (rose gold cage). */
   globe?: ModelSource;
   hand?: ModelSource;
+  /** Top + bottom strap armatures and skinned meshes. */
   strap?: ModelSource;
 }
+
+/** Terrestrial globe in the movement cage — metal-tinted cage, blue earth unchanged. */
+export type GlobePartSources = Partial<Record<MetalId, ModelSource>>;
 
 export interface NavLink {
   label: string;
@@ -100,6 +106,11 @@ export interface ArSettings {
   showPresetBar: boolean;
   maxPresets: number;
   tapToPlaceHint: string;
+  /**
+   * When false (default), AR uses the single compressed `arWatch` GLB for speed.
+   * Enable after per-combo files under `/models/ar/combos/` are Draco-compressed (~15–40 MB each).
+   */
+  usePerComboArModels: boolean;
 }
 
 export const DEFAULT_AR_SETTINGS: ArSettings = {
@@ -116,6 +127,7 @@ export const DEFAULT_AR_SETTINGS: ArSettings = {
   showPresetBar: true,
   maxPresets: 0,
   tapToPlaceHint: 'Tap the AR button, then place the watch on a flat surface.',
+  usePerComboArModels: false,
 };
 
 export interface SiteContent {
@@ -138,6 +150,8 @@ export interface SiteContent {
     eyebrow: string;
     title: string;
     description: string;
+    keepGlobeLabel: string;
+    keepGlobeHint: string;
     arButtonLabel: string;
     arDesktopHint: string;
     arMobileHint: string;
@@ -160,11 +174,17 @@ export interface SiteContent {
   footer: string;
 }
 
+export type PartIconSources = Partial<Record<ComponentId, ModelSource>>;
+
 export interface SiteCatalog {
   dragons: DragonVariant[];
   metals: MetalVariant[];
   components: { id: ComponentId; label: string }[];
+  /** Circular inspect-button thumbnails (builtin path, URL, or admin upload). */
+  partIcons?: PartIconSources;
   staticParts: StaticPartSources;
+  /** Per case-metal globe GLB (movement exports omit globe; loaded separately). */
+  globeParts: GlobePartSources;
   metalParts: Record<MetalId, MetalPartSources>;
   heroWatch: ModelSource;
   arWatch: ModelSource;
@@ -212,9 +232,53 @@ const builtinMetalParts = (metal: MetalId): MetalPartSources => ({
   movement: { type: 'builtin', path: `/models/movement/movement_${metal}.glb` },
 });
 
+const builtinGlobePart = (metal: MetalId): ModelSource => ({
+  type: 'builtin',
+  path: `/models/parts/globe_${metal}.glb`,
+});
+
+export function buildDefaultGlobeParts(): GlobePartSources {
+  return {
+    rose_gold: builtinGlobePart('rose_gold'),
+    white_gold: builtinGlobePart('white_gold'),
+    yellow_gold: builtinGlobePart('yellow_gold'),
+  };
+}
+
+export const AR_COMBO_BUILTIN_DIR = '/models/ar/combos';
+
+export function builtinArComboPath(dragon: DragonId, metal: MetalId): string {
+  return `${AR_COMBO_BUILTIN_DIR}/${dragon}_${metal}.glb`;
+}
+
+export function buildDefaultArCombos(): NonNullable<SiteCatalog['arCombos']> {
+  const combos = {} as Record<`${DragonId}_${MetalId}`, ModelSource>;
+  for (const d of DEFAULT_DRAGONS) {
+    for (const m of DEFAULT_METALS) {
+      const key = `${d.id}_${m.id}` as `${DragonId}_${MetalId}`;
+      combos[key] = { type: 'builtin', path: builtinArComboPath(d.id, m.id) };
+    }
+  }
+  return combos;
+}
+
+export function builtinPartIconPath(id: ComponentId): string {
+  return `/images/parts/${id}.svg`;
+}
+
+export function buildDefaultPartIcons(): PartIconSources {
+  const ids: ComponentId[] = ['dragon', 'case', 'movement', 'dial', 'globe', 'strap'];
+  const out: PartIconSources = {};
+  for (const id of ids) {
+    out[id] = { type: 'builtin', path: builtinPartIconPath(id) };
+  }
+  return out;
+}
+
 export const DEFAULT_CATALOG: SiteCatalog = {
   dragons: DEFAULT_DRAGONS,
   metals: DEFAULT_METALS,
+  partIcons: buildDefaultPartIcons(),
   components: [
     { id: 'dragon', label: 'Dragon' },
     { id: 'case', label: 'Case & Bezel' },
@@ -225,17 +289,19 @@ export const DEFAULT_CATALOG: SiteCatalog = {
   ],
   staticParts: {
     dial: { type: 'builtin', path: '/models/parts/dial.glb' },
-    globe: { type: 'builtin', path: '/models/parts/globe.glb' },
+    globe: { type: 'builtin', path: '/models/parts/globe_rose_gold.glb' },
     hand: { type: 'builtin', path: '/models/parts/hand.glb' },
     strap: { type: 'builtin', path: '/models/parts/strap.glb' },
   },
+  globeParts: buildDefaultGlobeParts(),
   metalParts: {
     rose_gold: builtinMetalParts('rose_gold'),
     white_gold: builtinMetalParts('white_gold'),
     yellow_gold: builtinMetalParts('yellow_gold'),
   },
   heroWatch: { type: 'builtin', path: '/models/full_watch/watch_full_default.glb' },
-  arWatch: { type: 'builtin', path: '/models/full_watch/watch_full_default.glb' },
+  arWatch: { type: 'builtin', path: '/models/full_watch/watch_full_ar.glb' },
+  arCombos: buildDefaultArCombos(),
 };
 
 export const DEFAULT_CONTENT: SiteContent = {
@@ -297,6 +363,8 @@ export const DEFAULT_CONTENT: SiteContent = {
     title: 'Make it yours.',
     description:
       'Choose the dragon\'s finish and the case metal. Click any component to isolate it; hover for a quick peek.',
+    keepGlobeLabel: 'Keep original globe',
+    keepGlobeHint: 'Case, bezel & movement still follow the metal picker',
     arButtonLabel: 'View in AR',
     arDesktopHint: 'On desktop · scan QR to your phone',
     arMobileHint: 'Opens Google Model Viewer AR',

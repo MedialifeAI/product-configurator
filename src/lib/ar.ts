@@ -1,8 +1,10 @@
 /** Shared AR / QR handoff helpers for Google Model Viewer + mobile deep links. */
 
-export const AR_MODEL_GLB = '/models/full_watch/watch_full_default.glb';
+/** Draco-compressed watch for AR (run `npm run compress:ar`). Falls back to hero GLB if missing. */
+export const AR_MODEL_GLB = '/models/full_watch/watch_full_ar.glb';
+export const AR_MODEL_GLB_FALLBACK = '/models/full_watch/watch_full_default.glb';
 /** Add a matching .usdz beside the GLB to enable iOS Quick Look (optional). */
-export const AR_MODEL_USDZ = '/models/full_watch/watch_full_default.usdz';
+export const AR_MODEL_USDZ = '/models/full_watch/watch_full_ar.usdz';
 
 export type DragonId = 'v1' | 'v2' | 'v3' | 'v4';
 export type MetalId = 'rose_gold' | 'white_gold' | 'yellow_gold';

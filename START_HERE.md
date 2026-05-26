@@ -24,13 +24,15 @@ That's it. The page loads, the watch appears, you scroll, the parts fly apart, y
 
 All 18 GLBs in `public/models/` are **Draco mesh + WebP texture compressed**. Verified end-to-end:
 
-| Source | Compressed | Reduction |
-|---|---|---|
-| 1.04 GB total | 64 MB total | **94%** |
-| watch_full_default.glb 266 MB | 15.0 MB | 94% |
-| movement variants 118 MB each | 6.8 MB each | 94% |
-| case variants 71 MB each | 3.2 MB each | 95% |
-| dragon variants 35 MB each | 3.0 MB each | 91% |
+
+| Source                        | Compressed  | Reduction |
+| ----------------------------- | ----------- | --------- |
+| 1.04 GB total                 | 64 MB total | **94%**   |
+| watch_full_default.glb 266 MB | 15.0 MB     | 94%       |
+| movement variants 118 MB each | 6.8 MB each | 94%       |
+| case variants 71 MB each      | 3.2 MB each | 95%       |
+| dragon variants 35 MB each    | 3.0 MB each | 91%       |
+
 
 Both NLA animations (`NLA_Exploded_View`, `NLA_Watch_Movement`) and all glTF extensions (`KHR_materials_transmission`, `KHR_materials_clearcoat`, `KHR_materials_ior`, `KHR_materials_anisotropy`, `KHR_materials_specular`) survive compression intact.
 

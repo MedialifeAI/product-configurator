@@ -1,15 +1,17 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { Suspense, useRef, useState } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
+import HeroCollectionPanel from '@/components/HeroCollectionPanel';
 import HeroSceneLoader from '@/components/HeroSceneLoader';
 import SiteHeader from '@/components/SiteHeader';
 import StoryPanel from '@/components/StoryPanel';
 import SpecsAndCTA from '@/components/SpecsAndCTA';
 import { useAssetLoadProgress } from '@/hooks/useAssetLoadProgress';
 import { useScrollProgress } from '@/hooks/useScrollProgress';
-import { scrollToConfigurator } from '@/lib/ar';
+import { getDeviceTier } from '@/lib/deviceTier';
 import { heroWatchUrl } from '@/lib/resolveModelUrl';
+import { resolveRenderQuality } from '@/lib/renderQuality';
 import { SiteConfigProvider, useSiteConfig } from '@/context/SiteConfigProvider';
 
 const WatchScene    = dynamic(() => import('@/components/WatchScene'),    { ssr: false });
@@ -36,10 +38,34 @@ function HomeContent() {
   const scrollProgress = useScrollProgress(scrollStripRef);
   const { config, settings } = useSiteConfig();
   const { content } = config;
-  const heroModelUrl = heroWatchUrl(config.catalog, settings.heroModelUrl);
+  const tier = useMemo(() => getDeviceTier(), []);
+  const heroRenderQuality = useMemo(
+    () =>
+      resolveRenderQuality(
+        settings.heroModelQuality ?? 'auto',
+        tier,
+        config.featureFlags?.useOptimizedAssets,
+      ),
+    [settings.heroModelQuality, tier, config.featureFlags?.useOptimizedAssets],
+  );
+  const heroModelUrl = heroWatchUrl(config.catalog, settings.heroModelUrl, {
+    useOptimizedAssets: heroRenderQuality.useOptimizedAssets,
+  });
   const { progress: heroProgress, done: heroAssetDone } = useAssetLoadProgress(heroModelUrl);
   const [sceneReady, setSceneReady] = useState(false);
+  const [configuratorInView, setConfiguratorInView] = useState(false);
   const showHeroLoader = !heroAssetDone || !sceneReady;
+
+  useEffect(() => {
+    const el = document.getElementById('configurator');
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => setConfiguratorInView(entry?.isIntersecting ?? false),
+      { rootMargin: '120px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   return (
     <main className="relative bg-ink text-bone">
@@ -59,21 +85,24 @@ function HomeContent() {
               scrollProgress={scrollProgress}
               settings={settings}
               catalog={config.catalog}
+              heroMounted={!configuratorInView}
+              useOptimizedAssets={config.featureFlags?.useOptimizedAssets}
+              showPerformanceOverlay={config.features.showPerformanceOverlay}
               onReady={() => setSceneReady(true)}
             />
           </Suspense>
         </div>
 
         <div className="relative -mt-screen">
-          <section className="relative h-screen w-full flex flex-col items-center justify-between px-6 pt-[max(6.5rem,11vh)] pb-[max(3.5rem,8vh)] z-10 pointer-events-none">
-            <div className="text-center max-w-3xl mx-auto w-full -translate-y-[4vh] sm:-translate-y-[5vh] md:-translate-y-[12vh] lg:-translate-y-[14vh]">
+          <section className="relative h-screen w-full flex flex-col items-center justify-between px-3 sm:px-5 pt-[max(5.25rem,9vh)] md:pt-[max(6rem,10vh)] pb-[max(1rem,2.5vh)] md:pb-[max(2rem,5vh)] z-10 pointer-events-none">
+            <div className="text-center max-w-3xl mx-auto w-full shrink-0 overflow-visible -translate-y-[6vh] sm:-translate-y-[5vh] md:-translate-y-[4vh] lg:-translate-y-[5vh] px-2">
               <h1
-                className="font-display text-6xl md:text-8xl lg:text-9xl leading-[0.95] animate-fade-up"
+                className="font-display text-[2.65rem] sm:text-6xl md:text-7xl lg:text-8xl leading-[1.08] md:leading-[1.05] overflow-visible animate-fade-up"
                 style={{ textShadow: '0 2px 28px rgba(0,0,0,0.92), 0 0 48px rgba(0,0,0,0.75)' }}
               >
                 <span className="block text-bone">{content.hero.titleLine1}</span>
                 <span
-                  className="block gold-text"
+                  className="block gold-text hero-title-accent"
                   style={{ filter: 'drop-shadow(0 2px 20px rgba(0,0,0,0.85))' }}
                 >
                   {content.hero.titleLine2}
@@ -81,40 +110,22 @@ function HomeContent() {
               </h1>
             </div>
 
-            <div className="text-center max-w-3xl mx-auto w-full translate-y-[8vh] md:translate-y-[10vh]">
-              <p
-                className="text-xs tracking-[0.4em] uppercase text-jc-gold/90 animate-fade-in mb-4 md:mb-5"
-                style={{ textShadow: '0 1px 12px rgba(0,0,0,0.9), 0 0 40px rgba(0,0,0,0.65)' }}
-              >
-                {content.hero.eyebrow}
-              </p>
-              <p
-                className="text-bone/90 max-w-xl mx-auto font-light text-base md:text-lg leading-relaxed animate-fade-up"
-                style={{
-                  animationDelay: '0.2s',
-                  textShadow: '0 1px 14px rgba(0,0,0,0.9), 0 0 32px rgba(0,0,0,0.6)',
-                }}
-              >
-                {content.hero.body}
-              </p>
-              <div className="mt-8 flex flex-col items-center gap-3 pointer-events-auto">
-                <button
-                  type="button"
-                  onClick={() => scrollToConfigurator()}
-                  className="text-xs tracking-[0.28em] uppercase text-jc-gold/90 hover:text-jc-gold transition animate-fade-up"
-                  style={{ animationDelay: '0.5s' }}
-                >
-                  {content.hero.exploreConfiguratorLabel}
-                </button>
+            <div className="w-full max-w-none sm:max-w-[40rem] md:max-w-[44rem] mx-auto translate-y-[5vh] md:translate-y-[6vh] px-0.5 sm:px-3">
+              <HeroCollectionPanel>
+                <p className="text-[9px] sm:text-xs tracking-[0.28em] uppercase text-jc-gold/90 mb-1 sm:mb-2">
+                  {content.hero.eyebrow}
+                </p>
+                <p className="text-bone/90 font-light text-[11px] sm:text-sm md:text-base leading-[1.35] sm:leading-snug max-w-none md:max-w-[36rem] md:mx-auto">
+                  {content.hero.body}
+                </p>
                 <button
                   type="button"
                   onClick={() => window.scrollBy({ top: window.innerHeight * 0.85, behavior: 'smooth' })}
-                  className="text-xs tracking-[0.3em] uppercase text-bone/55 hover:text-bone/80 transition animate-fade-up"
-                  style={{ animationDelay: '0.6s' }}
+                  className="mt-2 sm:mt-3 text-[9px] sm:text-xs tracking-[0.26em] uppercase text-jc-gold/90 hover:text-jc-gold transition"
                 >
                   {content.hero.scrollHint}
                 </button>
-              </div>
+              </HeroCollectionPanel>
             </div>
           </section>
 

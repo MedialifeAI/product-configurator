@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from '@/context/SceneSettings';
 import { mergeArSettings } from '@/lib/arSettings';
 import {
   DEFAULT_SITE_CONFIG,
+  DEFAULT_METAL_OVERRIDES,
   type SiteConfig,
   SITE_CONFIG_VERSION,
 } from '@/lib/siteConfigTypes';
@@ -27,8 +28,22 @@ export function mergeSiteConfig(partial: unknown): SiteConfig {
   return {
     version: SITE_CONFIG_VERSION,
     features: { ...DEFAULT_SITE_CONFIG.features, ...p.features },
+    featureFlags: { ...DEFAULT_SITE_CONFIG.featureFlags, ...p.featureFlags },
+    materialOverrides: {
+      metal: {
+        ...DEFAULT_METAL_OVERRIDES,
+        ...DEFAULT_SITE_CONFIG.materialOverrides?.metal,
+        ...p.materialOverrides?.metal,
+      },
+    },
     theme: { ...DEFAULT_SITE_CONFIG.theme, ...p.theme },
-    scene: { ...DEFAULT_SETTINGS, ...p.scene },
+    scene: {
+      ...DEFAULT_SETTINGS,
+      ...p.scene,
+      configBackgrounds: p.scene?.configBackgrounds?.length
+        ? p.scene.configBackgrounds
+        : DEFAULT_SETTINGS.configBackgrounds,
+    },
     ar: mergeArSettings(p.ar),
     content: deepMergeContent(DEFAULT_SITE_CONFIG.content, p.content),
     catalog: deepMergeCatalog(DEFAULT_SITE_CONFIG.catalog, p.catalog),

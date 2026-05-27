@@ -2,6 +2,7 @@
 
 import { ChangeEvent, useState } from 'react';
 import { useSceneSettings, useSiteConfig, type PersistStatus } from '@/context/SceneSettings';
+import type { ModelQuality } from '@/context/SceneSettings';
 import type { ArSettings } from '@/lib/siteConfigTypes';
 import {
   ADMIN_TOKEN_STORAGE_KEY,
@@ -184,7 +185,7 @@ export default function DebugSettings() {
             max={360}
             step={1}
             onChange={v => set('configYaw', (v * Math.PI) / 180)}
-            hint="0° = model default · 180° = dial toward camera"
+            hint="0° = dial toward camera · 180° = caseback"
           />
 
           <FileRow label="Replace configurator model"
@@ -193,6 +194,47 @@ export default function DebugSettings() {
                    onFile={onFile('config')}
                    onClear={() => void clear('config')()}
                    hint="Stored in Netlify Blobs; shared across visits" />
+        </Section>
+
+        <Section title="Configurator · Lighting">
+          <Slider label="Ambient" value={settings.configAmbient} min={0} max={1} step={0.01}
+                  onChange={v => set('configAmbient', v)} />
+          <Slider label="Key (warm white)" value={settings.configKey} min={0} max={3} step={0.05}
+                  onChange={v => set('configKey', v)} />
+          <Slider label="Rim (gold)" value={settings.configRim} min={0} max={2} step={0.05}
+                  onChange={v => set('configRim', v)} />
+          <Slider label="Kicker (cool)" value={settings.configKicker} min={0} max={1.5} step={0.05}
+                  onChange={v => set('configKicker', v)} />
+          <Slider label="Environment (HDR)" value={settings.configEnv} min={0} max={1.5} step={0.05}
+                  onChange={v => set('configEnv', v)} />
+          <Slider label="Exposure" value={settings.configExposure} min={0.2} max={1.6} step={0.02}
+                  onChange={v => set('configExposure', v)} />
+        </Section>
+
+        <Section title="Model quality">
+          <QualitySelect
+            label="Hero"
+            value={settings.heroModelQuality ?? 'auto'}
+            onChange={v => set('heroModelQuality', v)}
+          />
+          <QualitySelect
+            label="Configurator"
+            value={settings.configModelQuality ?? 'auto'}
+            onChange={v => set('configModelQuality', v)}
+          />
+        </Section>
+
+        <Section title="Configurator · Background">
+          <FieldRow
+            label="Fallback color"
+            value={settings.configCanvasColor ?? '#0a0a0c'}
+            onChange={v => set('configCanvasColor', v)}
+          />
+          <FieldRow
+            label="Default background id"
+            value={settings.configDefaultBackgroundId ?? 'ink'}
+            onChange={v => set('configDefaultBackgroundId', v)}
+          />
         </Section>
 
         <Section title="AR (Model Viewer)">
@@ -319,6 +361,55 @@ function Slider({
         className="w-full accent-[#b4904e]"
       />
       {hint && <div className="text-[10px] text-bone/40 mt-0.5">{hint}</div>}
+    </div>
+  );
+}
+
+function FieldRow({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div>
+      <div className="text-bone/70 mb-1">{label}</div>
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        className="w-full rounded-md bg-ink/60 border border-bone/15 px-2 py-1.5 text-bone text-[11px]"
+      />
+    </div>
+  );
+}
+
+function QualitySelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: ModelQuality;
+  onChange: (v: ModelQuality) => void;
+}) {
+  return (
+    <div>
+      <div className="text-bone/70 mb-1">{label}</div>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value as ModelQuality)}
+        className="w-full rounded-md bg-ink/60 border border-bone/15 px-2 py-1.5 text-bone text-[11px]"
+      >
+        {(['auto', 'low', 'medium', 'high'] as const).map(q => (
+          <option key={q} value={q}>
+            {q}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

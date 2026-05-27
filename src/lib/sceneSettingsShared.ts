@@ -36,6 +36,9 @@ export function mergeWithDefaults(partial: Partial<SceneSettings> | null): Scene
     heroModelUrl: partial.heroModelUrl ?? DEFAULT_SETTINGS.heroModelUrl,
     configModelUrl: partial.configModelUrl ?? DEFAULT_SETTINGS.configModelUrl,
     configYaw: partial.configYaw ?? DEFAULT_SETTINGS.configYaw,
+    configBackgrounds: partial.configBackgrounds?.length
+      ? partial.configBackgrounds
+      : DEFAULT_SETTINGS.configBackgrounds,
   };
 }
 

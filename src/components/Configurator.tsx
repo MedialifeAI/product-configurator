@@ -15,10 +15,10 @@
  * The configurator is its own self-contained experience.
  */
 
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { Environment, OrbitControls, useGLTF } from '@react-three/drei';
 import dynamic from 'next/dynamic';
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useCompactViewport } from '@/hooks/useCompactViewport';
 import * as THREE from 'three';
 import type { SceneSettings } from '@/context/SceneSettings';
@@ -38,10 +38,28 @@ import {
   syncConfigSearchParams,
 } from '@/lib/configUrl';
 import { getConfiguratorPartUrls, getDragonUrl } from '@/lib/catalogFromConfig';
+import { disposeObject3D } from '@/lib/disposeScene';
+import { getDeviceTier } from '@/lib/deviceTier';
+import { resolveRenderQuality, shouldWarmVariantPreload } from '@/lib/renderQuality';
+import { resolveBackgroundStyle } from '@/lib/resolveBackgroundUrl';
 import { hideEmbeddedGlobeInScene } from '@/lib/hideEmbeddedGlobe';
 import { warmArCatalogUrl } from '@/lib/arPreload';
 import { arWatchUrl, partIconUrl } from '@/lib/resolveModelUrl';
-import type { ComponentId, DragonId, MetalId, SiteCatalog } from '@/lib/siteConfigTypes';
+import type {
+  ComponentId,
+  DragonId,
+  MetalId,
+  MetalOverride,
+  SiteCatalog,
+  SiteConfig,
+} from '@/lib/siteConfigTypes';
+import { DEFAULT_METAL_OVERRIDES } from '@/lib/siteConfigTypes';
+import { WebGlContextBanner } from '@/components/WebGlContextBanner';
+import { WebGlContextListener } from '@/components/WebGlContextListener';
+import ConfiguratorBackgroundPicker from '@/components/ConfiguratorBackgroundPicker';
+import { PerformanceOverlayPanel, PerformanceSampler } from '@/components/PerformanceOverlay';
+import { MetalPart } from '@/components/Configurator/MetalPart';
+import { useInViewOnce } from '@/hooks/useInViewOnce';
 
 // The AR view bundles @google/model-viewer (~150KB) — load only when invoked.
 const ArView     = dynamic(() => import('./ArView'),     { ssr: false });
@@ -87,6 +105,15 @@ function Part({
     }
     return copy;
   }, [scene, dim, hideMovementGlobe]);
+
+  // Free GPU resources from the cloned scene when this clone is replaced or unmounted.
+  // The dim branch above clones materials; without this, those clones leak.
+  useEffect(() => {
+    return () => {
+      disposeObject3D(cloned);
+    };
+  }, [cloned]);
+
   return visible ? <primitive object={cloned} /> : null;
 }
 
@@ -109,7 +136,8 @@ function useWatchFit(fitUrl: string) {
 }
 
 function AssembledWatch({
-  dragon, metal, globeMetal, highlight, settings, catalog, scaleMultiplier = 1,
+  dragon, metal, globeMetal, highlight, settings, catalog, config, scaleMultiplier = 1,
+  useOptimizedAssets,
 }: {
   dragon: DragonId;
   metal: MetalId;
@@ -117,17 +145,55 @@ function AssembledWatch({
   highlight: ComponentId | null;
   settings: SceneSettings;
   catalog: SiteCatalog;
+  config: SiteConfig;
   /** Responsive shrink on phones / narrow viewports. */
   scaleMultiplier?: number;
+  useOptimizedAssets?: boolean;
 }) {
   const isDim = (id: ComponentId) => highlight !== null && highlight !== id;
-  const parts = getConfiguratorPartUrls(catalog, metal, { globeMetal });
+  const urlOpts = {
+    globeMetal,
+    useOptimizedAssets: useOptimizedAssets ?? config.featureFlags?.useOptimizedAssets,
+    consolidatedMetals: config.featureFlags?.consolidatedMetals,
+  };
+  const parts = getConfiguratorPartUrls(catalog, metal, urlOpts);
   const fit = useWatchFit(parts.caseBody);
   const scale = fit.scale * settings.configScale * scaleMultiplier;
-  const dragonUrl = getDragonUrl(catalog, dragon);
+  const dragonUrl = getDragonUrl(catalog, dragon, config);
+  const consolidated = config.featureFlags?.consolidatedMetals ?? false;
+  const metalOverrides = config.materialOverrides?.metal ?? DEFAULT_METAL_OVERRIDES;
+  const metalOverride: MetalOverride = metalOverrides[metal] ?? DEFAULT_METAL_OVERRIDES[metal];
+  const globeOverride: MetalOverride = metalOverrides[globeMetal] ?? DEFAULT_METAL_OVERRIDES[globeMetal];
 
-  // Operator override — single uploaded GLB stands in for the whole assembly.
-  const yaw = settings.configYaw ?? Math.PI;
+  const renderMetal = (
+    slot: string,
+    url: string,
+    dimId: ComponentId,
+    override: MetalOverride,
+    hideGlobe = false,
+  ) => {
+    if (consolidated) {
+      return (
+        <MetalPart
+          key={slot}
+          url={url}
+          override={override}
+          dim={isDim(dimId)}
+          hideMovementGlobe={hideGlobe}
+        />
+      );
+    }
+    return (
+      <Part
+        key={slot}
+        url={url}
+        dim={isDim(dimId)}
+        hideMovementGlobe={hideGlobe}
+      />
+    );
+  };
+
+  const yaw = settings.configYaw ?? 0;
 
   if (settings.configModelUrl) {
     return (
@@ -148,25 +214,48 @@ function AssembledWatch({
         position={[-fit.center.x * scale, -fit.center.y * scale, -fit.center.z * scale]}
         scale={scale}
       >
-      <Part key={parts.caseBody} url={parts.caseBody} dim={isDim('case')} />
-      <Part key={parts.case} url={parts.case} dim={isDim('case')} />
-      <Part
-        key={parts.movement}
-        url={parts.movement}
-        dim={isDim('movement')}
-        hideMovementGlobe
-      />
-      <Part key={parts.dial} url={parts.dial} dim={isDim('dial')} />
-      <Part key={parts.globe} url={parts.globe} dim={isDim('globe')} />
-      <Part key={parts.hand} url={parts.hand} dim={isDim('dial')} />
-      <Part key={dragonUrl} url={dragonUrl} dim={isDim('dragon')} />
-      <Part key={parts.strap} url={parts.strap} dim={isDim('strap')} />
+      {renderMetal('caseBody', parts.caseBody, 'case', metalOverride)}
+      {renderMetal('case', parts.case, 'case', metalOverride)}
+      {renderMetal('movement', parts.movement, 'movement', metalOverride, true)}
+      <Part key="dial" url={parts.dial} dim={isDim('dial')} />
+      {renderMetal('globe', parts.globe, 'globe', globeOverride)}
+      <Part key="hand" url={parts.hand} dim={isDim('dial')} />
+      <Part key="dragon" url={dragonUrl} dim={isDim('dragon')} />
+      <Part key="strap" url={parts.strap} dim={isDim('strap')} />
       </group>
     </group>
   );
 }
 
 type OrbitControlsApi = { reset: () => void };
+
+/** Softer product lighting — avoids blown HDR hotspots on polished metal. */
+function ConfiguratorLighting({
+  settings,
+  compact,
+}: {
+  settings: SceneSettings;
+  compact?: boolean;
+}) {
+  const gl = useThree(s => s.gl);
+  useEffect(() => {
+    gl.toneMappingExposure = settings.configExposure;
+  }, [gl, settings.configExposure]);
+
+  const envIntensity = compact
+    ? settings.configEnv * 0.77
+    : settings.configEnv;
+
+  return (
+    <>
+      <ambientLight intensity={settings.configAmbient} />
+      <directionalLight position={[2.5, 3.5, 4]} intensity={settings.configKey} color="#fff5e0" />
+      <directionalLight position={[-3, 1.5, -2.5]} intensity={settings.configRim} color="#b4904e" />
+      <directionalLight position={[0, -2, 3]} intensity={settings.configKicker} color="#6a8db3" />
+      <Environment preset="studio" environmentIntensity={envIntensity} />
+    </>
+  );
+}
 
 function ConfiguratorScene({
   dragon,
@@ -175,8 +264,12 @@ function ConfiguratorScene({
   highlight,
   settings,
   catalog,
+  config,
   scaleMultiplier,
   compact,
+  showPerformanceOverlay,
+  perfSourceId,
+  useOptimizedAssets,
   onResetReady,
 }: {
   dragon: DragonId;
@@ -185,8 +278,12 @@ function ConfiguratorScene({
   highlight: ComponentId | null;
   settings: SceneSettings;
   catalog: SiteCatalog;
+  config: SiteConfig;
   scaleMultiplier: number;
   compact: boolean;
+  showPerformanceOverlay: boolean;
+  perfSourceId: string;
+  useOptimizedAssets?: boolean;
   onResetReady: (reset: () => void) => void;
 }) {
   const controlsRef = useRef<OrbitControlsApi | null>(null);
@@ -199,10 +296,8 @@ function ConfiguratorScene({
 
   return (
     <>
-      <ambientLight intensity={0.25} />
-      <directionalLight position={[3, 4, 5]} intensity={1.1} color="#fff5e0" />
-      <directionalLight position={[-4, 2, -3]} intensity={0.8} color="#b4904e" />
-      <Environment preset="studio" environmentIntensity={compact ? 0.45 : 0.65} />
+      <PerformanceSampler enabled={showPerformanceOverlay} sourceId={perfSourceId} />
+      <ConfiguratorLighting settings={settings} compact={compact} />
       <Suspense fallback={null}>
         <AssembledWatch
           dragon={dragon}
@@ -211,15 +306,20 @@ function ConfiguratorScene({
           highlight={highlight}
           settings={settings}
           catalog={catalog}
+          config={config}
           scaleMultiplier={scaleMultiplier}
+          useOptimizedAssets={useOptimizedAssets}
         />
       </Suspense>
       <OrbitControls
         ref={controlsRef as never}
         enablePan={false}
         enableZoom
+        target={[0, 0.05, 0]}
         minDistance={compact ? 2.2 : 2.5}
         maxDistance={compact ? 5 : 6}
+        minPolarAngle={Math.PI / 4}
+        maxPolarAngle={Math.PI / 1.85}
         autoRotate={settings.configRotate > 0}
         autoRotateSpeed={settings.configRotate}
       />
@@ -254,6 +354,43 @@ export default function Configurator({
   const metals = catalog.metals;
   const components = catalog.components;
   const compact = useCompactViewport();
+  const tier = useMemo(() => getDeviceTier(), []);
+  const isLowTier = tier === 'low';
+  const renderQuality = useMemo(
+    () =>
+      resolveRenderQuality(
+        settings.configModelQuality ?? 'auto',
+        tier,
+        config.featureFlags?.useOptimizedAssets,
+      ),
+    [settings.configModelQuality, tier, config.featureFlags?.useOptimizedAssets],
+  );
+  const perfSourceId = useId();
+  const showPerf = features.showPerformanceOverlay;
+  const backgrounds = settings.configBackgrounds?.length
+    ? settings.configBackgrounds
+    : DEFAULT_SETTINGS.configBackgrounds;
+  const embedBgStyle = resolveBackgroundStyle(
+    backgrounds.find(b => b.id === (settings.configDefaultBackgroundId ?? 'ink')) ?? backgrounds[0],
+    settings.configCanvasColor ?? '#0a0a0c',
+  );
+  const canvasHostRef = useRef<HTMLDivElement>(null);
+  const canvasReady = useInViewOnce(canvasHostRef);
+  const [contextLost, setContextLost] = useState(false);
+  const [canvasEpoch, setCanvasEpoch] = useState(0);
+
+  const handleContextLost = useCallback(() => {
+    setContextLost(true);
+  }, []);
+
+  const reloadCanvas = useCallback(() => {
+    setContextLost(false);
+    setCanvasEpoch(n => n + 1);
+  }, []);
+
+  const urlOpts = {
+    useOptimizedAssets: renderQuality.useOptimizedAssets,
+  };
 
   const [dragon, setDragon] = useState<DragonId>('v1');
   const [metal, setMetal]   = useState<MetalId>('rose_gold');
@@ -261,7 +398,15 @@ export default function Configurator({
   const [pinnedGlobeMetal, setPinnedGlobeMetal] = useState<MetalId>('rose_gold');
   const globeMetal = keepOriginalGlobe ? pinnedGlobeMetal : metal;
 
-  useCatalogPreload(catalog, dragon, metal, globeMetal);
+  useCatalogPreload(catalog, dragon, metal, globeMetal, urlOpts.useOptimizedAssets, isLowTier);
+
+  // Desktop / mid-tier: warm all variant GLBs once so swaps stay instant.
+  useConfiguratorWarmPreload(
+    catalog,
+    urlOpts.useOptimizedAssets,
+    canvasReady &&
+      shouldWarmVariantPreload(settings.configModelQuality ?? 'auto', tier),
+  );
 
   const selectMetal = (id: MetalId) => {
     setMetal(id);
@@ -309,7 +454,7 @@ export default function Configurator({
 
   useEffect(() => {
     let cancelled = false;
-    const url = arWatchUrl(catalog);
+    const url = arWatchUrl(catalog, urlOpts);
     probeAssetByteSize(url).then(bytes => {
       if (!cancelled && bytes) setArAssetLabel(formatAssetMegabytes(bytes));
     });
@@ -320,7 +465,7 @@ export default function Configurator({
 
   const openArHandoff = (config: { dragon: DragonId; metal: MetalId }) => {
     if (typeof window === 'undefined') return;
-    warmArCatalogUrl(arWatchUrl(catalog));
+    warmArCatalogUrl(arWatchUrl(catalog, urlOpts));
     if (isMobileArDevice()) {
       setArMode('ar');
       return;
@@ -346,12 +491,12 @@ export default function Configurator({
   }, []);
 
   const handleArClick = () => {
-    warmArCatalogUrl(arWatchUrl(catalog));
+    warmArCatalogUrl(arWatchUrl(catalog, urlOpts));
     openArHandoff({ dragon, metal });
   };
 
   const onArButtonHover = () => {
-    warmArCatalogUrl(arWatchUrl(catalog));
+    warmArCatalogUrl(arWatchUrl(catalog, urlOpts));
   };
 
   const copyConfigLink = async () => {
@@ -374,21 +519,26 @@ export default function Configurator({
   };
 
   const configScaleMultiplier = embedPreview ? 0.85 : compact ? MOBILE_CONFIG_SCALE : 1;
-  const canvasDpr: [number, number] = embedPreview ? [1, 1.5] : compact ? [1, 1.25] : [1, 2];
+  const canvasDpr = renderQuality.dpr;
+  const canvasGl = {
+    antialias: renderQuality.antialias,
+    alpha: true,
+    powerPreference: (isLowTier ? 'low-power' : 'high-performance') as WebGLPowerPreference,
+  };
 
   if (embedPreview) {
     return (
-      <div className="h-[240px] md:h-[280px] relative">
+      <div className="h-full min-h-[360px] relative">
+        <div className="absolute inset-0 -z-10" style={embedBgStyle} aria-hidden />
         <Canvas
-          camera={{ position: [0, 0.3, 3.6], fov: 34 }}
+          camera={{ position: [0, 0.22, 3.5], fov: 34 }}
           dpr={canvasDpr}
-          gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}
+          gl={canvasGl}
           style={{ background: 'transparent' }}
         >
-          <ambientLight intensity={0.25} />
-          <directionalLight position={[3, 4, 5]} intensity={1.1} color="#fff5e0" />
-          <directionalLight position={[-4, 2, -3]} intensity={0.8} color="#b4904e" />
-          <Environment preset="studio" environmentIntensity={0.55} />
+          <WebGlContextListener onLost={handleContextLost} />
+          <PerformanceSampler enabled={showPerf} sourceId={perfSourceId} />
+          <ConfiguratorLighting settings={settings} compact />
           <Suspense fallback={null}>
             <AssembledWatch
               dragon={dragon}
@@ -397,7 +547,9 @@ export default function Configurator({
               highlight={null}
               settings={settings}
               catalog={catalog}
+              config={config}
               scaleMultiplier={configScaleMultiplier}
+              useOptimizedAssets={renderQuality.useOptimizedAssets}
             />
           </Suspense>
           <OrbitControls
@@ -409,6 +561,7 @@ export default function Configurator({
             autoRotateSpeed={settings.configRotate}
           />
         </Canvas>
+        <PerformanceOverlayPanel enabled={showPerf} sourceId={perfSourceId} />
         <div className="absolute bottom-0 inset-x-0 p-2 flex flex-wrap gap-1 bg-gradient-to-t from-ink/90 to-transparent pointer-events-auto">
           {dragons.map(v => (
             <button
@@ -464,20 +617,23 @@ export default function Configurator({
           }`}
         >
           <div
+            ref={canvasHostRef}
             className={`glass rounded-2xl lg:rounded-3xl overflow-hidden relative shrink-0 min-h-0 ${
               compact
                 ? 'h-[48dvh] min-h-[220px] max-h-[420px]'
                 : 'h-[50vh] sm:h-[55vh] lg:h-full'
             }`}
           >
-            {!arOpen && (
+            {!arOpen && canvasReady && !contextLost && (
             <Canvas
-              camera={{ position: [0, 0.3, 3.6], fov: compact ? 36 : 32 }}
+              key={canvasEpoch}
+              camera={{ position: [0, 0.22, 3.5], fov: compact ? 36 : 32 }}
               dpr={canvasDpr}
               frameloop={settings.configRotate > 0 ? 'always' : 'demand'}
-              gl={{ antialias: !compact, alpha: true, powerPreference: 'high-performance' }}
+              gl={canvasGl}
               style={{ background: 'transparent' }}
             >
+              <WebGlContextListener onLost={handleContextLost} />
               <ConfiguratorScene
                 dragon={dragon}
                 metal={metal}
@@ -485,12 +641,25 @@ export default function Configurator({
                 highlight={highlight}
                 settings={settings}
                 catalog={catalog}
+                config={config}
                 scaleMultiplier={configScaleMultiplier}
                 compact={compact}
+                showPerformanceOverlay={showPerf}
+                perfSourceId={perfSourceId}
+                useOptimizedAssets={renderQuality.useOptimizedAssets}
                 onResetReady={onResetReady}
               />
             </Canvas>
             )}
+            {!arOpen && (
+              <ConfiguratorBackgroundPicker
+                backgrounds={backgrounds}
+                defaultId={settings.configDefaultBackgroundId ?? 'ink'}
+                fallbackColor={settings.configCanvasColor ?? '#0a0a0c'}
+              />
+            )}
+            <PerformanceOverlayPanel enabled={showPerf && !arOpen} sourceId={perfSourceId} />
+            <WebGlContextBanner visible={contextLost} onReload={reloadCanvas} />
             {!arOpen && (
               <button
                 type="button"
@@ -734,7 +903,7 @@ export default function Configurator({
       {arMode === 'qr' && (
         <ArQrModal
           url={arUrl}
-          arModelUrl={arWatchUrl(catalog)}
+          arModelUrl={arWatchUrl(catalog, urlOpts)}
           configLabel={configLabel}
           onClose={closeAr}
         />
@@ -855,22 +1024,90 @@ function PartInspectButton({
   );
 }
 
-/** Preload active configuration — avoids fetching every metal/movement GLB at once. */
+/** Preload active configuration — idle + skip on save-data / 2G. */
 function useCatalogPreload(
   catalog: SiteCatalog,
   dragon: DragonId,
   metal: MetalId,
   globeMetal: MetalId,
+  useOptimizedAssets?: boolean,
+  lowTier?: boolean,
 ) {
   useEffect(() => {
-    const p = getConfiguratorPartUrls(catalog, metal, { globeMetal });
-    useGLTF.preload(getDragonUrl(catalog, dragon));
-    useGLTF.preload(p.caseBody);
-    useGLTF.preload(p.case);
-    useGLTF.preload(p.movement);
-    useGLTF.preload(p.globe);
-    useGLTF.preload(p.dial);
-    useGLTF.preload(p.hand);
-    useGLTF.preload(p.strap);
-  }, [catalog, dragon, metal, globeMetal]);
+    if (typeof window === 'undefined') return;
+
+    const conn = (navigator as Navigator & {
+      connection?: { saveData?: boolean; effectiveType?: string };
+    }).connection;
+    if (conn?.saveData || ['slow-2g', '2g'].includes(conn?.effectiveType ?? '')) return;
+
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      const p = getConfiguratorPartUrls(catalog, metal, {
+        globeMetal,
+        useOptimizedAssets,
+      });
+      useGLTF.preload(getDragonUrl(catalog, dragon, { featureFlags: { useOptimizedAssets } }));
+      useGLTF.preload(p.caseBody);
+      useGLTF.preload(p.case);
+      useGLTF.preload(p.movement);
+      useGLTF.preload(p.globe);
+      useGLTF.preload(p.dial);
+      useGLTF.preload(p.hand);
+      useGLTF.preload(p.strap);
+    };
+
+    const idleId = window.requestIdleCallback?.(run, { timeout: lowTier ? 2500 : 800 });
+    const timeoutId = idleId == null ? window.setTimeout(run, lowTier ? 1200 : 400) : undefined;
+
+    return () => {
+      cancelled = true;
+      if (idleId != null) window.cancelIdleCallback?.(idleId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+    };
+  }, [catalog, dragon, metal, globeMetal, useOptimizedAssets, lowTier]);
+}
+
+/** One-time warm preload of every dragon + metal combo (skipped on iOS low tier). */
+function useConfiguratorWarmPreload(
+  catalog: SiteCatalog,
+  useOptimizedAssets: boolean | undefined,
+  enabled: boolean,
+) {
+  const warmed = useRef(false);
+
+  useEffect(() => {
+    if (!enabled || warmed.current || typeof window === 'undefined') return;
+
+    let cancelled = false;
+    const run = () => {
+      if (cancelled) return;
+      warmed.current = true;
+      const flag = { featureFlags: { useOptimizedAssets } };
+      for (const d of catalog.dragons) {
+        useGLTF.preload(getDragonUrl(catalog, d.id, flag));
+      }
+      for (const m of catalog.metals) {
+        const p = getConfiguratorPartUrls(catalog, m.id, { useOptimizedAssets });
+        useGLTF.preload(p.caseBody);
+        useGLTF.preload(p.case);
+        useGLTF.preload(p.movement);
+        useGLTF.preload(p.globe);
+      }
+      const staticParts = getConfiguratorPartUrls(catalog, 'rose_gold', { useOptimizedAssets });
+      useGLTF.preload(staticParts.dial);
+      useGLTF.preload(staticParts.hand);
+      useGLTF.preload(staticParts.strap);
+    };
+
+    const idleId = window.requestIdleCallback?.(run, { timeout: 4000 });
+    const timeoutId = idleId == null ? window.setTimeout(run, 1500) : undefined;
+
+    return () => {
+      cancelled = true;
+      if (idleId != null) window.cancelIdleCallback?.(idleId);
+      if (timeoutId != null) window.clearTimeout(timeoutId);
+    };
+  }, [catalog, useOptimizedAssets, enabled]);
 }

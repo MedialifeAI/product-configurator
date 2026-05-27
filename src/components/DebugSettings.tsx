@@ -177,6 +177,15 @@ export default function DebugSettings() {
                   onChange={v => set('configScale', v)} />
           <Slider label="Auto-rotate speed" value={settings.configRotate} min={0} max={5} step={0.1}
                   onChange={v => set('configRotate', v)} />
+          <Slider
+            label="Watch yaw (°)"
+            value={Math.round((settings.configYaw * 180) / Math.PI)}
+            min={0}
+            max={360}
+            step={1}
+            onChange={v => set('configYaw', (v * Math.PI) / 180)}
+            hint="0° = model default · 180° = dial toward camera"
+          />
 
           <FileRow label="Replace configurator model"
                    filledUrl={settings.configModelUrl}

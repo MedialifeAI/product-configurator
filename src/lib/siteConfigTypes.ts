@@ -144,6 +144,9 @@ export interface SiteContent {
     titleLine2: string;
     body: string;
     scrollHint: string;
+    loadingTitle: string;
+    loadingSubtitle: string;
+    exploreConfiguratorLabel: string;
   };
   storyPanels: StoryPanelContent[];
   configurator: {
@@ -152,9 +155,14 @@ export interface SiteContent {
     description: string;
     keepGlobeLabel: string;
     keepGlobeHint: string;
+    editionLine: string;
+    shareLinkLabel: string;
+    shareLinkCopied: string;
+    resetViewLabel: string;
     arButtonLabel: string;
     arDesktopHint: string;
     arMobileHint: string;
+    arSizeHint: string;
   };
   specs: {
     eyebrow: string;
@@ -327,6 +335,9 @@ export const DEFAULT_CONTENT: SiteContent = {
     titleLine2: 'Dragon',
     body: 'A hand-engraved 18K rose-gold dragon orbits a triple-axis gravitational tourbillon — for eighteen people who will ever own one.',
     scrollHint: 'Scroll to reveal ↓',
+    loadingTitle: 'Preparing 3D experience',
+    loadingSubtitle: 'Loading the dragon…',
+    exploreConfiguratorLabel: 'Explore the configurator ↓',
   },
   storyPanels: [
     {
@@ -365,9 +376,14 @@ export const DEFAULT_CONTENT: SiteContent = {
       'Choose the dragon\'s finish and the case metal. Click any component to isolate it; hover for a quick peek.',
     keepGlobeLabel: 'Keep original globe',
     keepGlobeHint: 'Case, bezel & movement still follow the metal picker',
+    editionLine: 'Limited to 18 pieces worldwide · AT112.40.DR.SD.A',
+    shareLinkLabel: 'Copy link to this configuration',
+    shareLinkCopied: 'Link copied',
+    resetViewLabel: 'Reset view',
     arButtonLabel: 'View in AR',
     arDesktopHint: 'On desktop · scan QR to your phone',
-    arMobileHint: 'Opens Google Model Viewer AR',
+    arMobileHint: 'Best on iPhone · opens AR in your space',
+    arSizeHint: 'AR model ~15 MB · first open may take a moment on cellular',
   },
   specs: {
     eyebrow: 'Specifications',

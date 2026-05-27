@@ -2,6 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { useSiteConfig } from '@/context/SiteConfigProvider';
+import { scrollToConfigurator } from '@/lib/ar';
 
 export default function SpecsAndCTA() {
   const { config } = useSiteConfig();
@@ -14,6 +15,13 @@ export default function SpecsAndCTA() {
           <div className="text-center mb-14">
             <span className="text-xs tracking-[0.3em] uppercase text-jc-gold/80">{specs.eyebrow}</span>
             <h2 className="font-display text-5xl md:text-6xl mt-3 text-bone">{specs.title}</h2>
+            <button
+              type="button"
+              onClick={() => scrollToConfigurator()}
+              className="mt-5 text-[10px] tracking-[0.28em] uppercase text-bone/45 hover:text-jc-gold transition"
+            >
+              Back to configurator ↑
+            </button>
           </div>
           <div className="glass rounded-3xl divide-y divide-bone/5">
             {specs.rows.map((row, i) => (

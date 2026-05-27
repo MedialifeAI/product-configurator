@@ -17,11 +17,11 @@ html { scroll-behavior: smooth; }
 ::-webkit-scrollbar-thumb { background: rgba(180, 144, 78, 0.4); border-radius: 999px; }
 ::-webkit-scrollbar-thumb:hover { background: rgba(180, 144, 78, 0.7); }
 
-/* Glassmorphic panel utility */
+/* Glassmorphic panel utility — light blur so 3D scene stays visible behind */
 .glass {
-  background: linear-gradient(135deg, rgba(21,21,26,0.55) 0%, rgba(10,10,12,0.35) 100%);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  background: linear-gradient(135deg, rgba(21,21,26,0.38) 0%, rgba(10,10,12,0.22) 100%);
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
   border: 1px solid rgba(245, 242, 234, 0.08);
   box-shadow:
     inset 0 1px 0 rgba(245, 242, 234, 0.06),
@@ -29,9 +29,9 @@ html { scroll-behavior: smooth; }
 }
 
 .glass-gold-edge {
-  background: linear-gradient(135deg, rgba(21,21,26,0.55) 0%, rgba(10,10,12,0.35) 100%);
-  backdrop-filter: blur(20px) saturate(140%);
-  -webkit-backdrop-filter: blur(20px) saturate(140%);
+  background: linear-gradient(135deg, rgba(21,21,26,0.38) 0%, rgba(10,10,12,0.22) 100%);
+  backdrop-filter: blur(8px) saturate(120%);
+  -webkit-backdrop-filter: blur(8px) saturate(120%);
   border: 1px solid rgba(180, 144, 78, 0.25);
   box-shadow:
     inset 0 1px 0 rgba(180, 144, 78, 0.12),
@@ -62,8 +62,11 @@ html { scroll-behavior: smooth; }
 .canvas-hero { pointer-events: none; }
 .canvas-interactive { pointer-events: auto; }
 
-/* Google Model Viewer — slotted AR UI */
-model-viewer::part(default-ar-button),
+/* Google Model Viewer — AR CTA anchored to bottom (see ArView overlay) */
+model-viewer::part(default-ar-button) {
+  display: none !important;
+}
+
 .ar-slot-button {
   background: linear-gradient(135deg, rgba(180, 144, 78, 0.95), rgba(138, 106, 48, 0.95));
   border: 1px solid rgba(245, 242, 234, 0.35);
@@ -73,18 +76,28 @@ model-viewer::part(default-ar-button),
   font-weight: 600;
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  padding: 10px 18px;
+  padding: 12px 22px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  width: 100%;
+  max-width: 20rem;
 }
 
 .ar-slot-prompt {
-  font-size: 11px;
+  font-size: 10px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(245, 242, 234, 0.75);
-  max-width: 16rem;
+  color: rgba(245, 242, 234, 0.7);
+  max-width: 18rem;
   text-align: center;
-  line-height: 1.4;
+  line-height: 1.45;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
 
 .ar-control-chip {

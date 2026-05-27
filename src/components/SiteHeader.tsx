@@ -21,25 +21,13 @@ export default function SiteHeader() {
         scrolled ? 'py-3 backdrop-blur-md bg-ink/60 border-b border-bone/10' : 'py-6'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center justify-between">
+      <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center">
         <a
           href="#"
-          className="font-display text-[35px] md:text-[39px] leading-none tracking-wider gold-text"
+          className="font-display text-[26px] md:text-[30px] leading-none tracking-wider text-bone"
+          style={{ textShadow: '0 1px 12px rgba(0,0,0,0.85)' }}
         >
           {header.brand}
-        </a>
-        <nav className="hidden md:flex items-center gap-10 text-xs tracking-[0.25em] uppercase text-bone/80">
-          {header.nav.map(link => (
-            <a key={link.href} href={link.href} className="hover:text-jc-gold transition">
-              {link.label}
-            </a>
-          ))}
-        </nav>
-        <a
-          href={header.ctaHref}
-          className="text-xs tracking-[0.25em] uppercase border border-jc-gold/40 text-bone px-5 py-2 rounded-full hover:bg-jc-gold/10 transition"
-        >
-          {header.ctaLabel}
         </a>
       </div>
     </header>

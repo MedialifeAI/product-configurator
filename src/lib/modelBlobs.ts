@@ -11,10 +11,11 @@ function blobStore() {
 
 const IMAGE_EXT = /\.(png|jpe?g|webp|svg|gif|avif)$/i;
 
-/** Blob key uses forward slashes; GLB slots get `.glb`, image slots keep their extension. */
+/** Blob key uses forward slashes; GLB/USDZ slots keep their extension. */
 export function modelBlobKey(slot: string): string {
   if (IMAGE_EXT.test(slot)) return slot;
-  return slot.endsWith('.glb') ? slot : `${slot}.glb`;
+  if (slot.endsWith('.glb') || slot.endsWith('.usdz')) return slot;
+  return `${slot}.glb`;
 }
 
 export function blobContentType(key: string): string {
@@ -33,6 +34,8 @@ export function blobContentType(key: string): string {
       return 'image/gif';
     case 'avif':
       return 'image/avif';
+    case 'usdz':
+      return 'model/vnd.usdz+zip';
     default:
       return 'model/gltf-binary';
   }

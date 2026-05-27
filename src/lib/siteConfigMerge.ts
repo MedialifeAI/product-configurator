@@ -1,5 +1,6 @@
 import type { SceneSettings } from '@/context/SceneSettings';
 import { DEFAULT_SETTINGS } from '@/context/SceneSettings';
+import { harmonizeHeroLighting } from '@/lib/harmonizeHeroLighting';
 import { mergeArSettings } from '@/lib/arSettings';
 import {
   DEFAULT_SITE_CONFIG,
@@ -20,7 +21,7 @@ export function mergeSiteConfig(partial: unknown): SiteConfig {
   if (isLegacyScenePayload(partial)) {
     return {
       ...DEFAULT_SITE_CONFIG,
-      scene: { ...DEFAULT_SETTINGS, ...partial },
+      scene: harmonizeHeroLighting({ ...DEFAULT_SETTINGS, ...partial }),
     };
   }
 
@@ -37,13 +38,13 @@ export function mergeSiteConfig(partial: unknown): SiteConfig {
       },
     },
     theme: { ...DEFAULT_SITE_CONFIG.theme, ...p.theme },
-    scene: {
+    scene: harmonizeHeroLighting({
       ...DEFAULT_SETTINGS,
       ...p.scene,
       configBackgrounds: p.scene?.configBackgrounds?.length
         ? p.scene.configBackgrounds
         : DEFAULT_SETTINGS.configBackgrounds,
-    },
+    }),
     ar: mergeArSettings(p.ar),
     content: deepMergeContent(DEFAULT_SITE_CONFIG.content, p.content),
     catalog: deepMergeCatalog(DEFAULT_SITE_CONFIG.catalog, p.catalog),

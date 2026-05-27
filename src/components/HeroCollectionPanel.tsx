@@ -12,7 +12,7 @@ interface HeroCollectionPanelProps {
   children: ReactNode;
 }
 
-/** Hero glass card — fades out immediately on scroll so the 3D watch stays visible. */
+/** Hero glass card — fades out on scroll; matches StoryPanel glass styling. */
 export default function HeroCollectionPanel({ children }: HeroCollectionPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { scrollY } = useScroll();
@@ -30,7 +30,7 @@ export default function HeroCollectionPanel({ children }: HeroCollectionPanelPro
     <motion.div
       ref={panelRef}
       style={{ opacity }}
-      className="relative w-full glass-gold-edge rounded-lg sm:rounded-xl md:rounded-2xl px-3 py-2.5 sm:px-4 sm:py-3.5 md:px-7 md:py-5 pointer-events-auto text-center"
+      className="relative w-full glass-gold-edge rounded-2xl p-8 md:p-10 flex flex-col gap-4 items-center text-center pointer-events-auto"
     >
       {children}
     </motion.div>

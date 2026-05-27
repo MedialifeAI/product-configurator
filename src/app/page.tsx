@@ -9,6 +9,7 @@ import StoryPanel from '@/components/StoryPanel';
 import SpecsAndCTA from '@/components/SpecsAndCTA';
 import { useAssetLoadProgress } from '@/hooks/useAssetLoadProgress';
 import { useScrollProgress } from '@/hooks/useScrollProgress';
+import { AR_SESSION_EVENT } from '@/lib/ar';
 import { getDeviceTier } from '@/lib/deviceTier';
 import { heroWatchUrl } from '@/lib/resolveModelUrl';
 import { resolveRenderQuality } from '@/lib/renderQuality';
@@ -54,7 +55,17 @@ function HomeContent() {
   const { progress: heroProgress, done: heroAssetDone } = useAssetLoadProgress(heroModelUrl);
   const [sceneReady, setSceneReady] = useState(false);
   const [configuratorInView, setConfiguratorInView] = useState(false);
+  const [arSessionOpen, setArSessionOpen] = useState(false);
   const showHeroLoader = !heroAssetDone || !sceneReady;
+
+  useEffect(() => {
+    const onArSession = (event: Event) => {
+      const open = (event as CustomEvent<{ open: boolean }>).detail?.open;
+      if (typeof open === 'boolean') setArSessionOpen(open);
+    };
+    window.addEventListener(AR_SESSION_EVENT, onArSession);
+    return () => window.removeEventListener(AR_SESSION_EVENT, onArSession);
+  }, []);
 
   useEffect(() => {
     const el = document.getElementById('configurator');
@@ -85,7 +96,7 @@ function HomeContent() {
               scrollProgress={scrollProgress}
               settings={settings}
               catalog={config.catalog}
-              heroMounted={!configuratorInView}
+              heroMounted={!configuratorInView && !arSessionOpen}
               useOptimizedAssets={config.featureFlags?.useOptimizedAssets}
               showPerformanceOverlay={config.features.showPerformanceOverlay}
               onReady={() => setSceneReady(true)}
@@ -94,10 +105,10 @@ function HomeContent() {
         </div>
 
         <div className="relative -mt-screen">
-          <section className="relative h-screen w-full flex flex-col items-center justify-between px-3 sm:px-5 pt-[max(5.25rem,9vh)] md:pt-[max(6rem,10vh)] pb-[max(1rem,2.5vh)] md:pb-[max(2rem,5vh)] z-10 pointer-events-none">
-            <div className="text-center max-w-3xl mx-auto w-full shrink-0 overflow-visible -translate-y-[6vh] sm:-translate-y-[5vh] md:-translate-y-[4vh] lg:-translate-y-[5vh] px-2">
+          <section className="relative h-screen w-full flex flex-col items-center justify-between px-3 sm:px-5 pt-[max(6.75rem,12vh)] md:pt-[max(6.5rem,11vh)] pb-[max(1.25rem,3vh)] md:pb-[max(2rem,5vh)] z-10 pointer-events-none">
+            <div className="text-center max-w-3xl mx-auto w-full shrink-0 overflow-visible -translate-y-[6vh] sm:-translate-y-[2vh] md:-translate-y-[4vh] lg:-translate-y-[6vh] px-2 pt-1 sm:pt-0">
               <h1
-                className="font-display text-[2.65rem] sm:text-6xl md:text-7xl lg:text-8xl leading-[1.08] md:leading-[1.05] overflow-visible animate-fade-up"
+                className="font-display text-6xl md:text-8xl lg:text-9xl leading-[1.08] md:leading-[1.06] overflow-visible animate-fade-up"
                 style={{ textShadow: '0 2px 28px rgba(0,0,0,0.92), 0 0 48px rgba(0,0,0,0.75)' }}
               >
                 <span className="block text-bone">{content.hero.titleLine1}</span>
@@ -110,18 +121,18 @@ function HomeContent() {
               </h1>
             </div>
 
-            <div className="w-full max-w-none sm:max-w-[40rem] md:max-w-[44rem] mx-auto translate-y-[5vh] md:translate-y-[6vh] px-0.5 sm:px-3">
+            <div className="w-full max-w-none sm:max-w-[40rem] md:max-w-[44rem] mx-auto mb-[2vh] md:mb-[4vh] px-1 sm:px-3">
               <HeroCollectionPanel>
-                <p className="text-[9px] sm:text-xs tracking-[0.28em] uppercase text-jc-gold/90 mb-1 sm:mb-2">
+                <p className="text-[10px] sm:text-xs tracking-[0.3em] uppercase text-jc-gold/90 mb-2 sm:mb-2.5">
                   {content.hero.eyebrow}
                 </p>
-                <p className="text-bone/90 font-light text-[11px] sm:text-sm md:text-base leading-[1.35] sm:leading-snug max-w-none md:max-w-[36rem] md:mx-auto">
+                <p className="text-bone/90 font-light text-xs sm:text-sm md:text-base leading-snug max-w-none md:max-w-[36rem] md:mx-auto">
                   {content.hero.body}
                 </p>
                 <button
                   type="button"
                   onClick={() => window.scrollBy({ top: window.innerHeight * 0.85, behavior: 'smooth' })}
-                  className="mt-2 sm:mt-3 text-[9px] sm:text-xs tracking-[0.26em] uppercase text-jc-gold/90 hover:text-jc-gold transition"
+                  className="mt-3 sm:mt-4 text-[10px] sm:text-xs tracking-[0.26em] uppercase text-jc-gold/90 hover:text-jc-gold transition"
                 >
                   {content.hero.scrollHint}
                 </button>

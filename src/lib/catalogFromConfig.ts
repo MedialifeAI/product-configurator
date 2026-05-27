@@ -6,16 +6,33 @@ import {
   staticPartUrl,
 } from '@/lib/resolveModelUrl';
 
-export function getDragonUrl(catalog: SiteCatalog, dragonId: string): string {
+export type CatalogUrlOptions = {
+  globeMetal?: MetalId;
+  useOptimizedAssets?: boolean;
+  consolidatedMetals?: boolean;
+};
+
+function catalogOptions(config?: Pick<SiteConfig, 'featureFlags'>): CatalogUrlOptions {
+  return {
+    useOptimizedAssets: config?.featureFlags?.useOptimizedAssets ?? false,
+    consolidatedMetals: config?.featureFlags?.consolidatedMetals ?? false,
+  };
+}
+
+export function getDragonUrl(
+  catalog: SiteCatalog,
+  dragonId: string,
+  config?: Pick<SiteConfig, 'featureFlags'>,
+): string {
   const d = catalog.dragons.find(x => x.id === dragonId);
   if (!d) return catalog.dragons[0]!.builtinPath;
-  return dragonModelUrl(d);
+  return dragonModelUrl(d, catalogOptions(config));
 }
 
 export function getConfiguratorPartUrls(
   catalog: SiteCatalog,
   metal: MetalId,
-  options?: { globeMetal?: MetalId },
+  options?: CatalogUrlOptions,
 ): {
   caseBody: string;
   case: string;
@@ -26,22 +43,24 @@ export function getConfiguratorPartUrls(
   strap: string;
 } {
   const globeMetal = options?.globeMetal ?? metal;
+  const urlOpts = {
+    useOptimizedAssets: options?.useOptimizedAssets,
+    consolidatedMetals: options?.consolidatedMetals,
+  };
   return {
-    caseBody: metalPartUrl(catalog, metal, 'caseBody'),
-    case: metalPartUrl(catalog, metal, 'case'),
-    movement: metalPartUrl(catalog, metal, 'movement'),
-    dial: staticPartUrl(catalog, 'dial', '/models/parts/dial.glb'),
-    globe: globePartUrl(catalog, globeMetal),
-    hand: staticPartUrl(catalog, 'hand', '/models/parts/hand.glb'),
-    strap: staticPartUrl(catalog, 'strap', '/models/parts/strap.glb'),
+    caseBody: metalPartUrl(catalog, metal, 'caseBody', urlOpts),
+    case: metalPartUrl(catalog, metal, 'case', urlOpts),
+    movement: metalPartUrl(catalog, metal, 'movement', urlOpts),
+    dial: staticPartUrl(catalog, 'dial', '/models/parts/dial.glb', urlOpts),
+    globe: globePartUrl(catalog, globeMetal, urlOpts),
+    hand: staticPartUrl(catalog, 'hand', '/models/parts/hand.glb', urlOpts),
+    strap: staticPartUrl(catalog, 'strap', '/models/parts/strap.glb', urlOpts),
   };
 }
 
 /** Apply catalog blob/url overrides into catalog model fields from registry keys */
 export function syncCatalogFromBlobKeys(config: SiteConfig): SiteConfig {
   const c = { ...config, catalog: { ...config.catalog } };
-  const mapBlob = (key: string): { type: 'blob'; key: string } => ({ type: 'blob', key });
-
   // Registry keys are documentation; catalog stores ModelSource on each entity.
   return c;
 }

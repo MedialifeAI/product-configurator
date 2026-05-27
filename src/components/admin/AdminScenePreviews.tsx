@@ -12,11 +12,13 @@ function PreviewFrame({
   hint,
   children,
   footer,
+  tall,
 }: {
   title: string;
   hint?: string;
   children: React.ReactNode;
   footer?: React.ReactNode;
+  tall?: boolean;
 }) {
   return (
     <section className="glass rounded-2xl border border-bone/10 overflow-hidden">
@@ -24,7 +26,9 @@ function PreviewFrame({
         <span className="text-[10px] uppercase tracking-[0.25em] text-jc-gold/80">{title}</span>
         {hint && <span className="text-[9px] text-bone/40 truncate">{hint}</span>}
       </div>
-      <div className="relative bg-[#0a0a0c]">{children}</div>
+      <div className={`relative bg-[#0a0a0c] ${tall ? 'min-h-[320px] md:min-h-[420px] lg:min-h-[480px]' : 'min-h-[280px]'}`}>
+        {children}
+      </div>
       {footer && <div className="px-3 py-2 border-t border-bone/10">{footer}</div>}
     </section>
   );
@@ -32,7 +36,6 @@ function PreviewFrame({
 
 function HeroPreview() {
   const { config } = useSiteConfig();
-  /** Simulates page scroll; WatchScene adds heroAnimOffset on top (same as homepage). */
   const scrollProgress = useRef(0.35);
   const [scrollSim, setScrollSim] = useState(0.35);
 
@@ -50,6 +53,7 @@ function HeroPreview() {
     <PreviewFrame
       title="Hero preview"
       hint="Scroll + anim offset · live lighting"
+      tall
       footer={
         <div className="space-y-2">
           <label className="flex items-center gap-2 text-[10px] text-bone/60">
@@ -72,11 +76,13 @@ function HeroPreview() {
         </div>
       }
     >
-      <div className="h-[220px] md:h-[260px]">
+      <div className="absolute inset-0">
         <WatchScene
           scrollProgress={scrollProgress}
           settings={config.scene}
           catalog={config.catalog}
+          useOptimizedAssets={config.featureFlags?.useOptimizedAssets}
+          showPerformanceOverlay={config.features.showPerformanceOverlay}
           className="w-full h-full"
         />
       </div>
@@ -86,8 +92,10 @@ function HeroPreview() {
 
 function ConfiguratorPreview() {
   return (
-    <PreviewFrame title="Configurator preview" hint="Dragon · metal · scale">
-      <Configurator embedPreview />
+    <PreviewFrame title="Configurator preview" hint="Lighting · background · quality" tall>
+      <div className="absolute inset-0">
+        <Configurator embedPreview />
+      </div>
     </PreviewFrame>
   );
 }
@@ -95,12 +103,12 @@ function ConfiguratorPreview() {
 /** Live 3D previews for admin — updates as config changes in context. */
 export default function AdminScenePreviews() {
   return (
-    <aside className="space-y-4">
+    <div className="space-y-4">
       <p className="text-[10px] uppercase tracking-[0.2em] text-bone/45 px-1">
-        Live previews
+        Live previews — adjust controls in the sidebar
       </p>
       <HeroPreview />
       <ConfiguratorPreview />
-    </aside>
+    </div>
   );
 }

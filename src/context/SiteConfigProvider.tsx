@@ -13,13 +13,12 @@ import type { ReactNode } from 'react';
 import type { SceneSettings } from '@/context/SceneSettings';
 import { DEFAULT_SETTINGS } from '@/context/SceneSettings';
 import {
-  ADMIN_TOKEN_STORAGE_KEY,
   DEFAULT_SITE_CONFIG,
   SITE_CONFIG_API,
   type SiteConfig,
 } from '@/lib/siteConfigTypes';
 import { mergeSiteConfig, stripBlobUrlsFromScene } from '@/lib/siteConfigMerge';
-import { SCENE_SETTINGS_API } from '@/lib/sceneSettingsShared';
+import { adminHeaders, SCENE_SETTINGS_API } from '@/lib/sceneSettingsShared';
 
 export type PersistStatus = 'idle' | 'loading' | 'ready' | 'saving' | 'saved' | 'error' | 'offline';
 
@@ -32,16 +31,13 @@ interface Ctx {
   resetScene: () => void;
   saveConfig: () => Promise<boolean>;
   persistStatus: PersistStatus;
+  persistError: string | null;
   lastSavedAt: string | null;
 }
 
 const SiteConfigContext = createContext<Ctx | null>(null);
 
-export function adminHeaders(): HeadersInit {
-  if (typeof window === 'undefined') return {};
-  const token = sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
+export { adminHeaders } from '@/lib/sceneSettingsShared';
 
 const SCENE_SAVE_DEBOUNCE_MS = 900;
 
@@ -55,6 +51,7 @@ export function SiteConfigProvider({
 }) {
   const [config, setConfigState] = useState<SiteConfig>(DEFAULT_SITE_CONFIG);
   const [persistStatus, setPersistStatus] = useState<PersistStatus>('loading');
+  const [persistError, setPersistError] = useState<string | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const hydrated = useRef(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,6 +77,7 @@ export function SiteConfigProvider({
 
   const persistScene = useCallback(async (scene: SceneSettings) => {
     setPersistStatus('saving');
+    setPersistError(null);
     try {
       const res = await fetch(SCENE_SETTINGS_API, {
         method: 'PUT',
@@ -87,14 +85,20 @@ export function SiteConfigProvider({
         body: JSON.stringify({ settings: stripBlobUrlsFromScene(scene) }),
       });
       if (res.status === 401) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setPersistError(body.error ?? 'Invalid admin token');
         setPersistStatus('error');
         return;
       }
-      if (!res.ok) throw new Error('save failed');
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? 'Save failed');
+      }
       const data = await res.json();
       setLastSavedAt(data.updatedAt ?? null);
       setPersistStatus('saved');
-    } catch {
+    } catch (err) {
+      setPersistError(err instanceof Error ? err.message : 'Save failed');
       setPersistStatus('error');
     }
   }, []);
@@ -132,6 +136,7 @@ export function SiteConfigProvider({
 
   const saveConfig = useCallback(async () => {
     setPersistStatus('saving');
+    setPersistError(null);
     try {
       const res = await fetch(SITE_CONFIG_API, {
         method: 'PUT',
@@ -139,16 +144,27 @@ export function SiteConfigProvider({
         body: JSON.stringify({ config }),
       });
       if (res.status === 401) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setPersistError(body.error ?? 'Invalid admin token');
         setPersistStatus('error');
         return false;
       }
-      if (!res.ok) throw new Error('save failed');
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        throw new Error(
+          body.error ??
+            (res.status === 503
+              ? 'Database unavailable — run npm run dev:netlify locally'
+              : 'Save failed'),
+        );
+      }
       const data = await res.json();
       setConfigState(mergeSiteConfig(data.config));
       setLastSavedAt(data.updatedAt ?? null);
       setPersistStatus('saved');
       return true;
-    } catch {
+    } catch (err) {
+      setPersistError(err instanceof Error ? err.message : 'Save failed');
       setPersistStatus('error');
       return false;
     }
@@ -164,9 +180,10 @@ export function SiteConfigProvider({
       resetScene,
       saveConfig,
       persistStatus,
+      persistError,
       lastSavedAt,
     }),
-    [config, setConfig, patchConfig, setScene, resetScene, saveConfig, persistStatus, lastSavedAt],
+    [config, setConfig, patchConfig, setScene, resetScene, saveConfig, persistStatus, persistError, lastSavedAt],
   );
 
   return (
@@ -214,12 +231,13 @@ export function useSiteConfig(): Ctx {
 
 /** Backward-compatible alias used across 3D components */
 export function useSceneSettings() {
-  const { settings, setScene, resetScene, persistStatus, lastSavedAt } = useSiteConfig();
+  const { settings, setScene, resetScene, persistStatus, persistError, lastSavedAt } = useSiteConfig();
   return {
     settings,
     set: setScene,
     reset: resetScene,
     persistStatus,
+    persistError,
     lastSavedAt,
   };
 }

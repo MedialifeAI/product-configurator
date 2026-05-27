@@ -3,8 +3,10 @@
 /** Draco-compressed watch for AR (run `npm run compress:ar`). Falls back to hero GLB if missing. */
 export const AR_MODEL_GLB = '/models/full_watch/watch_full_ar.glb';
 export const AR_MODEL_GLB_FALLBACK = '/models/full_watch/watch_full_default.glb';
-/** Add a matching .usdz beside the GLB to enable iOS Quick Look (optional). */
+/** Matching USDZ for iOS Quick Look (run `npm run build:usdz`). */
 export const AR_MODEL_USDZ = '/models/full_watch/watch_full_ar.usdz';
+
+export { getArUsdzPath } from '@/lib/resolveModelUrl';
 
 export type DragonId = 'v1' | 'v2' | 'v3' | 'v4';
 export type MetalId = 'rose_gold' | 'white_gold' | 'yellow_gold';

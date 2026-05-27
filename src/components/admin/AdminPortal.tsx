@@ -21,6 +21,8 @@ import {
   type SiteConfig,
   type StoryPanelContent,
 } from '@/lib/siteConfigTypes';
+import type { ConfiguratorBackgroundOption, ModelQuality } from '@/context/SceneSettings';
+import { DEFAULT_CONFIG_BACKGROUNDS } from '@/context/SceneSettings';
 
 type Tab = 'overview' | 'features' | 'scene' | 'ar' | 'models' | 'content' | 'theme';
 
@@ -35,22 +37,74 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export default function AdminPortal() {
-  const { config, setConfig, saveConfig, persistStatus, lastSavedAt } = useSiteConfig();
+  const { config, setConfig, saveConfig, persistStatus, persistError, lastSavedAt } = useSiteConfig();
   const [tab, setTab] = useState<Tab>('overview');
   const [token, setToken] = useState('');
   const [authed, setAuthed] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [loginPending, setLoginPending] = useState(false);
 
   useEffect(() => {
-    const stored = sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
-    if (stored) {
+    let cancelled = false;
+
+    const restoreSession = async () => {
+      try {
+        const res = await fetch('/api/admin/validate');
+        if (cancelled) return;
+        const body = (await res.json().catch(() => ({}))) as {
+          ok?: boolean;
+          authRequired?: boolean;
+        };
+        if (res.ok && body.authRequired === false) {
+          setAuthed(true);
+          return;
+        }
+      } catch {
+        /* fall through to stored-token restore */
+      }
+
+      const stored = sessionStorage.getItem(ADMIN_TOKEN_STORAGE_KEY);
+      if (!stored || cancelled) return;
       setToken(stored);
-      setAuthed(true);
-    }
+      try {
+        const res = await fetch('/api/admin/validate', {
+          headers: { Authorization: `Bearer ${stored}` },
+        });
+        if (cancelled) return;
+        if (res.ok) setAuthed(true);
+        else sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+      } catch {
+        sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+        setLoginError('Could not verify session — sign in again.');
+      }
+    };
+
+    void restoreSession();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  const login = () => {
-    sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, token.trim());
-    setAuthed(true);
+  const login = async () => {
+    const trimmed = token.trim();
+    setLoginError(null);
+    setLoginPending(true);
+    try {
+      sessionStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, trimmed);
+      const res = await fetch('/api/admin/validate', { headers: adminHeaders() });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+        setLoginError(body.error ?? 'Invalid admin token');
+        return;
+      }
+      setAuthed(true);
+    } catch {
+      setLoginError('Could not reach server — run npm run dev:netlify for saves');
+      sessionStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    } finally {
+      setLoginPending(false);
+    }
   };
 
   const logout = () => {
@@ -65,8 +119,12 @@ export default function AdminPortal() {
         <div className="glass-gold-edge rounded-3xl p-10 max-w-md w-full">
           <h1 className="font-display text-3xl text-bone">Admin portal</h1>
           <p className="text-bone/60 text-sm mt-3 leading-relaxed">
-            Enter the <code className="text-jc-gold/90">SCENE_SETTINGS_ADMIN_TOKEN</code> from Netlify environment variables.
+            Enter the <code className="text-jc-gold/90">SCENE_SETTINGS_ADMIN_TOKEN</code> from Netlify
+            (or <code className="text-jc-gold/90">.env.local</code> when running locally).
           </p>
+          {loginError && (
+            <p className="mt-3 text-xs text-amber-200/90 leading-relaxed">{loginError}</p>
+          )}
           <input
             type="password"
             value={token}
@@ -76,10 +134,11 @@ export default function AdminPortal() {
           />
           <button
             type="button"
-            onClick={login}
-            className="mt-4 w-full rounded-full bg-jc-gold text-ink py-3 text-xs uppercase tracking-[0.25em] hover:bg-yellow-gold transition"
+            onClick={() => void login()}
+            disabled={loginPending}
+            className="mt-4 w-full rounded-full bg-jc-gold text-ink py-3 text-xs uppercase tracking-[0.25em] hover:bg-yellow-gold transition disabled:opacity-50"
           >
-            Sign in
+            {loginPending ? 'Checking…' : 'Sign in'}
           </button>
           <Link href="/" className="block text-center mt-6 text-xs text-bone/40 hover:text-bone">
             ← Back to site
@@ -95,7 +154,7 @@ export default function AdminPortal() {
         <div className="max-w-[1440px] mx-auto px-6 py-4 flex items-center justify-between gap-4">
           <div>
             <h1 className="font-display text-2xl gold-text">Configurator Admin</h1>
-            <StatusLine status={persistStatus} lastSavedAt={lastSavedAt} />
+            <StatusLine status={persistStatus} lastSavedAt={lastSavedAt} error={persistError} />
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -131,9 +190,9 @@ export default function AdminPortal() {
         </nav>
       </header>
 
-      <main className="max-w-[1440px] mx-auto px-6 py-10">
-        <div className="flex flex-col xl:grid xl:grid-cols-[minmax(0,1fr)_340px] gap-8 items-start">
-          <div className="min-w-0 w-full">
+      <main className="max-w-[1600px] mx-auto px-4 sm:px-6 py-6">
+        <div className="flex flex-col xl:grid xl:grid-cols-[minmax(260px,300px)_minmax(0,1fr)] gap-5 items-start">
+          <aside className="w-full xl:sticky xl:top-36 xl:max-h-[calc(100vh-9rem)] xl:overflow-y-auto order-2 xl:order-1 space-y-4">
             {tab === 'overview' && <OverviewTab config={config} setTab={setTab} />}
             {tab === 'features' && <FeaturesTab config={config} setConfig={setConfig} />}
             {tab === 'scene' && <SceneTab config={config} setConfig={setConfig} />}
@@ -141,8 +200,8 @@ export default function AdminPortal() {
             {tab === 'models' && <ModelsTab config={config} setConfig={setConfig} />}
             {tab === 'content' && <ContentTab config={config} setConfig={setConfig} />}
             {tab === 'theme' && <ThemeTab config={config} setConfig={setConfig} />}
-          </div>
-          <div className="w-full xl:sticky xl:top-36 xl:max-h-[calc(100vh-10rem)] xl:overflow-y-auto">
+          </aside>
+          <div className="w-full min-w-0 order-1 xl:order-2 xl:sticky xl:top-36">
             <AdminScenePreviews />
           </div>
         </div>
@@ -151,17 +210,29 @@ export default function AdminPortal() {
   );
 }
 
-function StatusLine({ status, lastSavedAt }: { status: PersistStatus; lastSavedAt: string | null }) {
+function StatusLine({
+  status,
+  lastSavedAt,
+  error,
+}: {
+  status: PersistStatus;
+  lastSavedAt: string | null;
+  error?: string | null;
+}) {
   const labels: Record<PersistStatus, string> = {
     idle: '—',
     loading: 'Loading…',
     ready: 'Connected to Netlify Database',
     saving: 'Saving…',
     saved: lastSavedAt ? `Saved ${new Date(lastSavedAt).toLocaleString()}` : 'Saved',
-    error: 'Save failed — check token',
-    offline: 'Offline — run netlify dev',
+    error: error ?? 'Save failed — check admin token and dev:netlify',
+    offline: 'Offline — run npm run dev:netlify for database saves',
   };
-  return <p className="text-[11px] text-bone/50 mt-1">{labels[status]}</p>;
+  return (
+    <p className={`text-[11px] mt-1 leading-relaxed ${status === 'error' ? 'text-amber-200/90' : 'text-bone/50'}`}>
+      {labels[status]}
+    </p>
+  );
 }
 
 function OverviewTab({ config, setTab }: { config: SiteConfig; setTab: (t: Tab) => void }) {
@@ -170,7 +241,7 @@ function OverviewTab({ config, setTab }: { config: SiteConfig; setTab: (t: Tab) 
     { ok: !config.features.showSceneControls, label: 'Scene-controls gear hidden on public site' },
     { ok: config.features.showArButton, label: 'View in AR enabled' },
     { ok: !config.ar.usePerComboArModels, label: 'Fast AR mode (single compressed GLB)' },
-    { ok: yawDeg === 180 || yawDeg === 0, label: `Configurator yaw set (${yawDeg}° — dial toward camera)` },
+    { ok: yawDeg === 0, label: `Configurator yaw ${yawDeg}° (0° = dial toward camera)` },
   ];
 
   return (
@@ -225,7 +296,7 @@ function OverviewTab({ config, setTab }: { config: SiteConfig; setTab: (t: Tab) 
           <li>Dragon variants: {config.catalog.dragons.length}</li>
           <li>Metal variants: {config.catalog.metals.length}</li>
           <li>Story panels: {config.content.storyPanels.length}</li>
-          <li>Live hero & configurator previews are in the right column (desktop) or below the form (mobile).</li>
+          <li>Live hero & configurator previews fill the main column (desktop).</li>
         </ul>
       </Card>
     </div>
@@ -253,6 +324,13 @@ function FeaturesTab({
         checked={config.features.showArButton}
         onChange={v =>
           setConfig(p => ({ ...p, features: { ...p.features, showArButton: v } }))
+        }
+      />
+      <Toggle
+        label="Show FPS / draw-call overlay on 3D canvases"
+        checked={config.features.showPerformanceOverlay}
+        onChange={v =>
+          setConfig(p => ({ ...p, features: { ...p.features, showPerformanceOverlay: v } }))
         }
       />
       <p className="text-[11px] text-bone/40 mt-3">
@@ -384,7 +462,7 @@ function SceneTab({
         <Slider label="Environment" value={s.heroEnv} min={0} max={1.5} step={0.05} onChange={v => set('heroEnv', v)} />
         <Slider label="Exposure" value={s.heroExposure} min={0.2} max={1.6} step={0.02} onChange={v => set('heroExposure', v)} />
       </Card>
-      <Card title="Configurator">
+      <Card title="Configurator transform">
         <Slider label="Scale" value={s.configScale} min={0.3} max={2.5} step={0.05} onChange={v => set('configScale', v)} />
         <Slider label="Auto-rotate" value={s.configRotate} min={0} max={5} step={0.1} onChange={v => set('configRotate', v)} />
         <Slider
@@ -396,8 +474,70 @@ function SceneTab({
           onChange={v => set('configYaw', (v * Math.PI) / 180)}
         />
         <p className="text-[10px] text-bone/45 -mt-2">
-          Dial toward camera. Default 180° (π rad) for exported GLBs that load facing away.
+          Dial toward camera. Default 0° (front view).
         </p>
+      </Card>
+      <Card title="Configurator lighting">
+        <Slider label="Ambient" value={s.configAmbient} min={0} max={1} step={0.01} onChange={v => set('configAmbient', v)} />
+        <Slider label="Key" value={s.configKey} min={0} max={3} step={0.05} onChange={v => set('configKey', v)} />
+        <Slider label="Rim" value={s.configRim} min={0} max={2} step={0.05} onChange={v => set('configRim', v)} />
+        <Slider label="Kicker" value={s.configKicker} min={0} max={1.5} step={0.05} onChange={v => set('configKicker', v)} />
+        <Slider label="Environment" value={s.configEnv} min={0} max={1.5} step={0.05} onChange={v => set('configEnv', v)} />
+        <Slider label="Exposure" value={s.configExposure} min={0.2} max={1.6} step={0.02} onChange={v => set('configExposure', v)} />
+      </Card>
+      <Card title="Model quality">
+        <QualitySelect
+          label="Hero quality"
+          value={s.heroModelQuality ?? 'auto'}
+          onChange={v => set('heroModelQuality', v)}
+        />
+        <QualitySelect
+          label="Configurator quality"
+          value={s.configModelQuality ?? 'auto'}
+          onChange={v => set('configModelQuality', v)}
+        />
+        <p className="text-[10px] text-bone/45">
+          Auto follows device tier (DPR, antialiasing, optimized GLBs). Low prefers compressed assets unless optimized assets are disabled site-wide.
+        </p>
+      </Card>
+      <Card title="Configurator canvas background">
+        <Field
+          label="Fallback color"
+          value={s.configCanvasColor ?? '#0a0a0c'}
+          onChange={v => set('configCanvasColor', v)}
+        />
+        <Field
+          label="Default background id"
+          value={s.configDefaultBackgroundId ?? 'ink'}
+          onChange={v => set('configDefaultBackgroundId', v)}
+        />
+        {(s.configBackgrounds ?? DEFAULT_CONFIG_BACKGROUNDS).map((bg, i) => (
+          <BackgroundOptionEditor
+            key={bg.id}
+            option={bg}
+            onChange={next => {
+              const list = [...(s.configBackgrounds ?? DEFAULT_CONFIG_BACKGROUNDS)];
+              list[i] = next;
+              set('configBackgrounds', list);
+            }}
+            onRemove={() => {
+              const list = (s.configBackgrounds ?? DEFAULT_CONFIG_BACKGROUNDS).filter((_, j) => j !== i);
+              set('configBackgrounds', list.length ? list : DEFAULT_CONFIG_BACKGROUNDS);
+            }}
+          />
+        ))}
+        <button
+          type="button"
+          onClick={() => {
+            const list = [...(s.configBackgrounds ?? DEFAULT_CONFIG_BACKGROUNDS)];
+            const id = `bg_${list.length + 1}`;
+            list.push({ id, label: 'New color', type: 'color', color: '#0a0a0c' });
+            set('configBackgrounds', list);
+          }}
+          className="text-[10px] text-jc-gold border border-jc-gold/30 px-3 py-1.5 rounded-lg hover:bg-jc-gold/10"
+        >
+          Add background
+        </button>
       </Card>
       <button
         type="button"
@@ -941,9 +1081,9 @@ function Toggle({
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="glass rounded-2xl p-6 border border-bone/10">
-      <h2 className="font-display text-xl text-bone mb-4">{title}</h2>
-      <div className="space-y-3">{children}</div>
+    <section className="glass rounded-xl p-4 border border-bone/10">
+      <h2 className="font-display text-base text-bone mb-3">{title}</h2>
+      <div className="space-y-2">{children}</div>
     </section>
   );
 }
@@ -988,8 +1128,8 @@ function Slider({
   onChange: (v: number) => void;
 }) {
   return (
-    <div className="mb-3">
-      <div className="flex justify-between text-xs text-bone/60 mb-1">
+    <div className="mb-2">
+      <div className="flex justify-between text-[11px] text-bone/60 mb-0.5">
         <span>{label}</span>
         <span className="tabular-nums">{value.toFixed(2)}</span>
       </div>
@@ -1000,8 +1140,122 @@ function Slider({
         step={step}
         value={value}
         onChange={e => onChange(parseFloat(e.target.value))}
-        className="w-full accent-jc-gold"
+        className="w-full accent-jc-gold h-1.5"
       />
+    </div>
+  );
+}
+
+function QualitySelect({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: ModelQuality;
+  onChange: (v: ModelQuality) => void;
+}) {
+  return (
+    <div className="mb-2">
+      <label className="text-[10px] uppercase tracking-wider text-bone/50 block mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value as ModelQuality)}
+        className="w-full rounded-lg bg-ink/50 border border-bone/10 px-3 py-1.5 text-xs text-bone"
+      >
+        {(['auto', 'low', 'medium', 'high'] as const).map(q => (
+          <option key={q} value={q}>
+            {q}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function BackgroundOptionEditor({
+  option,
+  onChange,
+  onRemove,
+}: {
+  option: ConfiguratorBackgroundOption;
+  onChange: (o: ConfiguratorBackgroundOption) => void;
+  onRemove: () => void;
+}) {
+  const [uploading, setUploading] = useState(false);
+
+  const uploadImage = async (file: File) => {
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.set('slot', `backgrounds/${option.id}`);
+      form.set('file', file);
+      const res = await fetch('/api/models/upload', {
+        method: 'POST',
+        headers: adminHeaders(),
+        body: form,
+      });
+      if (!res.ok) throw new Error('upload failed');
+      const json = (await res.json()) as { slot?: string };
+      onChange({
+        ...option,
+        type: 'image',
+        image: { type: 'blob', key: json.slot ?? `backgrounds/${option.id}` },
+      });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="mb-3 pb-3 border-b border-bone/10 last:border-0">
+      <div className="flex gap-2 mb-2">
+        <Field label="Id" value={option.id} onChange={v => onChange({ ...option, id: v })} />
+        <Field label="Label" value={option.label} onChange={v => onChange({ ...option, label: v })} />
+      </div>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {(['color', 'image'] as const).map(type => (
+          <button
+            key={type}
+            type="button"
+            onClick={() => onChange({ ...option, type, color: option.color ?? '#0a0a0c' })}
+            className={`px-2 py-0.5 rounded-full text-[9px] uppercase border ${
+              option.type === type ? 'border-jc-gold/50 text-jc-gold' : 'border-bone/15 text-bone/50'
+            }`}
+          >
+            {type}
+          </button>
+        ))}
+        <button type="button" onClick={onRemove} className="text-[9px] text-bone/40 hover:text-bone ml-auto">
+          Remove
+        </button>
+      </div>
+      {option.type === 'color' ? (
+        <div className="flex items-center gap-2">
+          <input
+            type="color"
+            value={option.color ?? '#0a0a0c'}
+            onChange={e => onChange({ ...option, color: e.target.value })}
+            className="w-8 h-8 rounded border-0 cursor-pointer"
+          />
+          <Field label="Hex" value={option.color ?? '#0a0a0c'} onChange={v => onChange({ ...option, color: v })} />
+        </div>
+      ) : (
+        <label className="cursor-pointer text-[10px] text-jc-gold border border-jc-gold/30 px-3 py-1 rounded-lg inline-block">
+          {uploading ? 'Uploading…' : 'Upload background image'}
+          <input
+            type="file"
+            accept=".png,.jpg,.jpeg,.webp"
+            className="hidden"
+            disabled={uploading}
+            onChange={e => {
+              const f = e.target.files?.[0];
+              if (f) void uploadImage(f);
+              e.target.value = '';
+            }}
+          />
+        </label>
+      )}
     </div>
   );
 }

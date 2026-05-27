@@ -83,7 +83,34 @@ export interface SiteFeatures {
   showSceneControls: boolean;
   /** Show View in AR button in configurator. */
   showArButton: boolean;
+  /** FPS / draw-call overlay on hero + configurator canvases. */
+  showPerformanceOverlay: boolean;
 }
+
+export interface SiteFeatureFlags {
+  /** Serve GLBs from /models-optimized (run `npm run build:assets` first). */
+  useOptimizedAssets?: boolean;
+  /** One geometry + PBR tint per metal part (requires identical source meshes). */
+  consolidatedMetals?: boolean;
+}
+
+export type MetalFinishKey = MetalId;
+
+export interface MetalOverride {
+  color: string;
+  metalness: number;
+  roughness: number;
+  ior?: number;
+  clearcoat?: number;
+}
+
+export type MetalOverrideMap = Record<MetalFinishKey, MetalOverride>;
+
+export const DEFAULT_METAL_OVERRIDES: MetalOverrideMap = {
+  rose_gold: { color: '#b76e79', metalness: 1, roughness: 0.22 },
+  white_gold: { color: '#e6e6e6', metalness: 1, roughness: 0.18 },
+  yellow_gold: { color: '#d4af37', metalness: 1, roughness: 0.24 },
+};
 
 export interface ArPreset {
   dragon: DragonId;
@@ -203,6 +230,9 @@ export interface SiteCatalog {
 export interface SiteConfig {
   version: typeof SITE_CONFIG_VERSION;
   features: SiteFeatures;
+  featureFlags?: SiteFeatureFlags;
+  /** Runtime PBR tints when featureFlags.consolidatedMetals is enabled. */
+  materialOverrides?: { metal?: MetalOverrideMap };
   theme: SiteTheme;
   scene: SceneSettings;
   /** Google Model Viewer / AR session tuning. */
@@ -419,6 +449,14 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   features: {
     showSceneControls: false,
     showArButton: true,
+    showPerformanceOverlay: false,
+  },
+  featureFlags: {
+    useOptimizedAssets: false,
+    consolidatedMetals: false,
+  },
+  materialOverrides: {
+    metal: DEFAULT_METAL_OVERRIDES,
   },
   theme: DEFAULT_THEME,
   scene: DEFAULT_SETTINGS,

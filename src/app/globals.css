@@ -46,6 +46,13 @@ html { scroll-behavior: smooth; }
   color: transparent;
 }
 
+/* Preserve descenders on gradient hero accent (e.g. Dragon “g”). */
+.hero-title-accent {
+  display: block;
+  line-height: 1.12;
+  padding-bottom: 0.14em;
+}
+
 /* A faint vignette over the whole page so foreground text reads well */
 .vignette::after {
   content: '';

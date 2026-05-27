@@ -5,7 +5,8 @@ const TEXTURE_PROPS = [
   'emissiveMap', 'bumpMap', 'displacementMap', 'alphaMap',
   'envMap', 'lightMap', 'clearcoatMap', 'clearcoatNormalMap',
   'clearcoatRoughnessMap', 'sheenColorMap', 'sheenRoughnessMap',
-  'transmissionMap', 'thicknessMap', 'specularMap', 'specularIntensityMap',
+  'transmissionMap', 'thicknessMap', 'specularColorMap', 'specularIntensityMap',
+  'iridescenceMap', 'iridescenceThicknessMap', 'anisotropyMap',
 ] as const;
 
 function disposeMaterial(mat: THREE.Material) {

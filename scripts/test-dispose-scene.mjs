@@ -8,8 +8,15 @@ const TEXTURE_PROPS = [
   'emissiveMap', 'bumpMap', 'displacementMap', 'alphaMap',
   'envMap', 'lightMap', 'clearcoatMap', 'clearcoatNormalMap',
   'clearcoatRoughnessMap', 'sheenColorMap', 'sheenRoughnessMap',
-  'transmissionMap', 'thicknessMap', 'specularMap', 'specularIntensityMap',
+  'transmissionMap', 'thicknessMap', 'specularColorMap', 'specularIntensityMap',
+  'iridescenceMap', 'iridescenceThicknessMap', 'anisotropyMap',
 ];
+
+assert.equal(
+  TEXTURE_PROPS.length,
+  23,
+  'TEXTURE_PROPS length mismatch — keep src/lib/disposeScene.ts in sync with this test',
+);
 
 function disposeMaterial(mat) {
   for (const key of TEXTURE_PROPS) {

@@ -1,11 +1,18 @@
 import type { ModelQuality } from '@/context/SceneSettings';
 import type { DeviceTier } from '@/lib/deviceTier';
+import { isIosDevice } from '@/lib/ar';
 
 export interface RenderQualitySettings {
   dpr: [number, number];
   antialias: boolean;
   /** When true, prefer /models-optimized paths. */
   useOptimizedAssets: boolean;
+}
+
+export function resolveWebGlPowerPreference(tier: DeviceTier): WebGLPowerPreference {
+  if (isIosDevice()) return 'default';
+  if (tier === 'low') return 'low-power';
+  return 'high-performance';
 }
 
 function tierToQuality(tier: DeviceTier): ModelQuality {
@@ -32,9 +39,10 @@ export function resolveRenderQuality(
 
   switch (effective) {
     case 'low':
+      // iOS maps to low tier — keep memory caps but restore MSAA + sharper DPR (no AA looked jagged/blurry).
       return {
-        dpr: [1, 1.25],
-        antialias: false,
+        dpr: [1, 1.5],
+        antialias: true,
         useOptimizedAssets,
       };
     case 'medium':

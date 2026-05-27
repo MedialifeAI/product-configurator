@@ -42,7 +42,7 @@ import {
 import { getConfiguratorPartUrls, getDragonUrl } from '@/lib/catalogFromConfig';
 import { disposeObject3D } from '@/lib/disposeScene';
 import { getDeviceTier } from '@/lib/deviceTier';
-import { resolveRenderQuality, shouldWarmVariantPreload } from '@/lib/renderQuality';
+import { resolveRenderQuality, resolveWebGlPowerPreference, shouldWarmVariantPreload } from '@/lib/renderQuality';
 import { resolveBackgroundStyle } from '@/lib/resolveBackgroundUrl';
 import { hideEmbeddedGlobeInScene } from '@/lib/hideEmbeddedGlobe';
 import { warmArCatalogUrl } from '@/lib/arPreload';
@@ -538,7 +538,7 @@ export default function Configurator({
   const canvasGl = {
     antialias: renderQuality.antialias,
     alpha: true,
-    powerPreference: (isLowTier ? 'low-power' : 'high-performance') as WebGLPowerPreference,
+    powerPreference: resolveWebGlPowerPreference(tier),
   };
 
   if (embedPreview) {

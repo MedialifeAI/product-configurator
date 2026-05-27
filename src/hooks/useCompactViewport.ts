@@ -16,3 +16,18 @@ export function useCompactViewport(breakpointPx = 1024) {
 
   return compact;
 }
+
+/** True at desktop breakpoints (inverse of compact). */
+export function useMinViewport(minWidthPx = 1024) {
+  const [wide, setWide] = useState(false);
+
+  useEffect(() => {
+    const mq = window.matchMedia(`(min-width: ${minWidthPx}px)`);
+    const update = () => setWide(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, [minWidthPx]);
+
+  return wide;
+}

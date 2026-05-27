@@ -12,8 +12,9 @@ import type { SceneSettings } from '@/context/SceneSettings';
 import { DEFAULT_SETTINGS } from '@/context/SceneSettings';
 import { WebGlContextBanner } from '@/components/WebGlContextBanner';
 import { WebGlContextListener } from '@/components/WebGlContextListener';
+import { useMinViewport } from '@/hooks/useCompactViewport';
 import { getDeviceTier } from '@/lib/deviceTier';
-import { resolveRenderQuality } from '@/lib/renderQuality';
+import { resolveRenderQuality, resolveWebGlPowerPreference } from '@/lib/renderQuality';
 import { heroWatchUrl } from '@/lib/resolveModelUrl';
 import { softenPbrMaterials } from '@/lib/softenPbrMaterials';
 import { DEFAULT_CATALOG, type SiteCatalog } from '@/lib/siteConfigTypes';
@@ -26,10 +27,18 @@ interface WatchProps {
   settings: SceneSettings;
   catalog: SiteCatalog;
   useOptimizedAssets?: boolean;
+  scaleBoost?: number;
   onReady?: () => void;
 }
 
-function Watch({ scrollProgress, settings, catalog, useOptimizedAssets, onReady }: WatchProps) {
+function Watch({
+  scrollProgress,
+  settings,
+  catalog,
+  useOptimizedAssets,
+  scaleBoost = 1,
+  onReady,
+}: WatchProps) {
   const group = useRef<THREE.Group>(null);
   const url = heroWatchUrl(catalog, settings.heroModelUrl, { useOptimizedAssets });
   const gltf = useGLTF(url) as any;
@@ -106,7 +115,7 @@ function Watch({ scrollProgress, settings, catalog, useOptimizedAssets, onReady 
     }
   });
 
-  const finalScale = fit.scale * settings.heroScale;
+  const finalScale = fit.scale * settings.heroScale * scaleBoost;
   return (
     <group ref={group} position={[0, settings.heroY, 0]}>
       <group
@@ -165,6 +174,7 @@ export default function WatchScene({
 }: WatchSceneProps) {
   const cat = catalog ?? DEFAULT_CATALOG;
   const tier = useMemo(() => getDeviceTier(), []);
+  const isDesktop = useMinViewport(1024);
   const perfSourceId = useId();
   const quality = resolveRenderQuality(
     settings.heroModelQuality ?? 'auto',
@@ -190,12 +200,12 @@ export default function WatchScene({
       {!contextLost && (
         <Canvas
           key={canvasEpoch}
-          camera={{ position: [0, 0.4, 4.2], fov: 32, near: 0.1, far: 100 }}
+          camera={{ position: [0, 0.4, isDesktop ? 3.95 : 4.2], fov: 32, near: 0.1, far: 100 }}
           dpr={quality.dpr}
           gl={{
             antialias: quality.antialias,
             alpha: true,
-            powerPreference: isLowTier ? 'low-power' : 'high-performance',
+            powerPreference: resolveWebGlPowerPreference(tier),
           }}
           style={{ background: 'transparent' }}
         >
@@ -209,6 +219,7 @@ export default function WatchScene({
             settings={settings}
             catalog={cat}
             useOptimizedAssets={quality.useOptimizedAssets}
+            scaleBoost={isDesktop ? 1.14 : 1}
             onReady={onReady}
           />
           {!isLowTier && (

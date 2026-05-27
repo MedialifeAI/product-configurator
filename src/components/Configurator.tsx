@@ -26,9 +26,11 @@ import { DEFAULT_SETTINGS } from '@/context/SceneSettings';
 import { useSiteConfig } from '@/context/SiteConfigProvider';
 import {
   buildArHandoffUrl,
+  isIosDevice,
   isMobileArDevice,
   parseArSearchParams,
   scrollToConfigurator,
+  setArSessionOpen,
   stripArParamsFromUrl,
 } from '@/lib/ar';
 import { formatAssetMegabytes, probeAssetByteSize } from '@/lib/arAssetSize';
@@ -44,6 +46,7 @@ import { resolveRenderQuality, shouldWarmVariantPreload } from '@/lib/renderQual
 import { resolveBackgroundStyle } from '@/lib/resolveBackgroundUrl';
 import { hideEmbeddedGlobeInScene } from '@/lib/hideEmbeddedGlobe';
 import { warmArCatalogUrl } from '@/lib/arPreload';
+import { releaseConfiguratorGltfCache } from '@/lib/releaseConfiguratorGltf';
 import { arWatchUrl, partIconUrl } from '@/lib/resolveModelUrl';
 import type {
   ComponentId,
@@ -417,6 +420,7 @@ export default function Configurator({
   const highlight = hovered ?? selected;
 
   const [arMode, setArMode] = useState<null | 'ar' | 'qr'>(null);
+  const [arUiReady, setArUiReady] = useState(false);
   const arOpen = arMode !== null;
   const [arUrl, setArUrl] = useState<string>('');
   const [mobileAr, setMobileAr] = useState(false);
@@ -463,14 +467,23 @@ export default function Configurator({
     };
   }, [catalog]);
 
-  const openArHandoff = (config: { dragon: DragonId; metal: MetalId }) => {
+  const openArHandoff = (handoff: { dragon: DragonId; metal: MetalId }) => {
     if (typeof window === 'undefined') return;
+    if (isIosDevice()) {
+      releaseConfiguratorGltfCache(catalog, config, handoff.dragon, handoff.metal, globeMetal);
+      setArSessionOpen(true);
+    }
     warmArCatalogUrl(arWatchUrl(catalog, urlOpts));
     if (isMobileArDevice()) {
+      setArUiReady(!isIosDevice());
       setArMode('ar');
+      if (isIosDevice()) {
+        window.setTimeout(() => setArUiReady(true), 350);
+      }
       return;
     }
-    setArUrl(buildArHandoffUrl(window.location.href, config));
+    setArSessionOpen(true);
+    setArUrl(buildArHandoffUrl(window.location.href, handoff));
     setArMode('qr');
   };
 
@@ -513,6 +526,8 @@ export default function Configurator({
 
   const closeAr = () => {
     setArMode(null);
+    setArUiReady(false);
+    setArSessionOpen(false);
     if (typeof window !== 'undefined' && window.location.search.includes('ar=')) {
       window.history.replaceState({}, '', stripArParamsFromUrl(window.location.href));
     }
@@ -612,7 +627,7 @@ export default function Configurator({
         </div>
 
         <div
-          className={`flex flex-col gap-3 min-h-0 flex-1 lg:grid lg:grid-cols-[3fr_2fr] lg:gap-5 lg:items-stretch ${
+          className={`flex flex-col gap-3 min-h-0 flex-1 lg:grid lg:grid-cols-[7fr_6fr] lg:gap-5 lg:items-stretch ${
             compact ? 'max-h-[calc(100dvh-7.5rem)]' : 'lg:h-[min(68vh,680px)]'
           }`}
         >
@@ -686,113 +701,112 @@ export default function Configurator({
               compact ? 'flex-1 p-4 gap-4' : 'p-3 md:p-4 gap-3 lg:h-full'
             }`}
           >
-            <div className={compact ? 'space-y-3' : 'space-y-3 lg:space-y-2.5'}>
-              <div className={compact ? undefined : 'lg:grid lg:grid-cols-2 lg:gap-3 lg:items-start'}>
-                <div>
-                  <h3 className={`tracking-[0.3em] uppercase text-bone/60 ${compact ? 'text-[10px] mb-2' : 'text-[10px] mb-1.5'}`}>
-                    The Dragon
-                  </h3>
-                  <div
-                    className={
-                      compact
-                        ? 'flex gap-2 overflow-x-auto overscroll-x-contain pb-1 scrollbar-hide -mx-0.5 px-0.5'
-                        : 'grid gap-1.5 grid-cols-2 lg:grid-cols-1 xl:grid-cols-2'
-                    }
-                  >
-                    {dragons.map(v => (
-                      <DragonVariantChip
-                        key={v.id}
-                        label={v.label}
-                        sub={v.sub}
-                        swatch={v.swatch}
-                        selected={dragon === v.id}
-                        compact={compact}
-                        horizontal={compact}
-                        onClick={() => setDragon(v.id)}
-                      />
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className={`tracking-[0.3em] uppercase text-bone/60 ${compact ? 'text-[10px] mb-2' : 'text-[10px] mb-1.5'}`}>
-                    Case · Bezel · Movement
-                  </h3>
-                  <div className={`flex ${compact ? 'gap-2' : 'gap-1.5'}`}>
-                    {metals.map(v => (
-                      <button
-                        key={v.id}
-                        type="button"
-                        onClick={() => selectMetal(v.id)}
-                        title={v.label}
-                        className={`flex-1 min-w-0 rounded-lg transition border flex flex-col items-center ${
-                          compact ? 'p-2 gap-1' : 'p-1.5 gap-0.5'
-                        } ${
-                          metal === v.id
-                            ? 'border-jc-gold/60 bg-jc-gold/5'
-                            : 'border-bone/10 hover:border-bone/30'
-                        }`}
-                      >
-                        <span
-                          className={`rounded-full border border-bone/20 shadow-inner shrink-0 ${
-                            compact ? 'w-7 h-7' : 'w-6 h-6'
-                          }`}
-                          style={{ background: `radial-gradient(circle at 35% 30%, ${v.swatch}, #2a2a2a)` }}
-                        />
-                        <span className={`text-bone truncate w-full text-center ${compact ? 'text-[10px]' : 'text-[9px] leading-tight'}`}>
-                          {v.label.replace(' Gold', '')}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  <label
-                    className={`flex items-center gap-2 cursor-pointer group ${
-                      compact ? 'mt-2' : 'mt-2'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={keepOriginalGlobe}
-                      onChange={e => {
-                        const on = e.target.checked;
-                        if (on) setPinnedGlobeMetal(metal);
-                        setKeepOriginalGlobe(on);
-                      }}
-                      className="accent-jc-gold shrink-0"
+            <div className={compact ? 'space-y-3' : 'space-y-4 lg:space-y-3.5'}>
+              <div>
+                <h3 className={`tracking-[0.3em] uppercase text-bone/60 ${compact ? 'text-[10px] mb-2' : 'text-[10px] mb-2'}`}>
+                  The Dragon
+                </h3>
+                <div
+                  className={
+                    compact
+                      ? 'flex gap-2 overflow-x-auto overscroll-x-contain pb-1 scrollbar-hide -mx-0.5 px-0.5'
+                      : 'grid grid-cols-2 gap-2'
+                  }
+                >
+                  {dragons.map(v => (
+                    <DragonVariantChip
+                      key={v.id}
+                      label={v.label}
+                      sub={v.sub}
+                      swatch={v.swatch}
+                      selected={dragon === v.id}
+                      compact={compact}
+                      horizontal={compact}
+                      onClick={() => setDragon(v.id)}
                     />
-                    <span className="min-w-0 leading-snug">
-                      <span className={`block text-bone/75 group-hover:text-bone transition ${compact ? 'text-[10px]' : 'text-[10px]'}`}>
-                        {copy.keepGlobeLabel}
-                      </span>
-                      {!compact && (
-                        <span className="block text-bone/40 text-[9px] mt-0.5 line-clamp-2">
-                          {copy.keepGlobeHint}
-                        </span>
-                      )}
-                    </span>
-                  </label>
+                  ))}
                 </div>
+              </div>
+
+              <div>
+                <h3 className={`tracking-[0.28em] uppercase text-bone/60 leading-snug ${compact ? 'text-[10px] mb-2' : 'text-[10px] mb-2'}`}>
+                  {compact ? (
+                    'Case · Bezel · Movement'
+                  ) : (
+                    <>
+                      <span className="block">Case · Bezel</span>
+                      <span className="block mt-0.5">Movement</span>
+                    </>
+                  )}
+                </h3>
+                <div className={`flex ${compact ? 'gap-2' : 'gap-2'}`}>
+                  {metals.map(v => (
+                    <button
+                      key={v.id}
+                      type="button"
+                      onClick={() => selectMetal(v.id)}
+                      title={v.label}
+                      className={`flex-1 min-w-0 rounded-lg transition border flex flex-col items-center ${
+                        compact ? 'p-2 gap-1' : 'p-2 gap-1'
+                      } ${
+                        metal === v.id
+                          ? 'border-jc-gold/60 bg-jc-gold/5'
+                          : 'border-bone/10 hover:border-bone/30'
+                      }`}
+                    >
+                      <span
+                        className={`rounded-full border border-bone/20 shadow-inner shrink-0 ${
+                          compact ? 'w-7 h-7' : 'w-7 h-7'
+                        }`}
+                        style={{ background: `radial-gradient(circle at 35% 30%, ${v.swatch}, #2a2a2a)` }}
+                      />
+                      <span className={`text-bone truncate w-full text-center ${compact ? 'text-[10px]' : 'text-[10px] leading-tight'}`}>
+                        {v.label.replace(' Gold', '')}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <label className="flex items-center gap-2 cursor-pointer group mt-2.5">
+                  <input
+                    type="checkbox"
+                    checked={keepOriginalGlobe}
+                    onChange={e => {
+                      const on = e.target.checked;
+                      if (on) setPinnedGlobeMetal(metal);
+                      setKeepOriginalGlobe(on);
+                    }}
+                    className="accent-jc-gold shrink-0"
+                  />
+                  <span className="min-w-0 leading-snug">
+                    <span className={`block text-bone/75 group-hover:text-bone transition ${compact ? 'text-[10px]' : 'text-[10px]'}`}>
+                      {copy.keepGlobeLabel}
+                    </span>
+                    {!compact && (
+                      <span className="block text-bone/40 text-[9px] mt-0.5 leading-snug">
+                        {copy.keepGlobeHint}
+                      </span>
+                    )}
+                  </span>
+                </label>
               </div>
             </div>
 
-            <div>
-              <div className={`flex items-baseline justify-between ${compact ? 'mb-2' : 'mb-2'}`}>
-                <h3 className={`tracking-[0.3em] uppercase text-bone/60 ${compact ? 'text-[10px]' : 'text-[10px] lg:text-[11px]'}`}>
-                  Inspect
-                </h3>
-                {!compact && (
-                  <span className="text-[9px] lg:text-[10px] uppercase tracking-[0.25em] text-bone/30">
-                    Click to lock · hover to peek
-                  </span>
-                )}
-              </div>
-              <div className={`grid grid-cols-3 ${compact ? 'gap-2' : 'gap-2 lg:gap-2'}`}>
+            <div className="shrink-0">
+              <h3 className={`tracking-[0.3em] uppercase text-bone/60 ${compact ? 'text-[10px] mb-1' : 'text-[10px] mb-1'}`}>
+                Inspect
+              </h3>
+              {!compact && (
+                <p className="text-[9px] uppercase tracking-[0.22em] text-bone/30 mb-2 leading-snug">
+                  Click to lock · hover to peek
+                </p>
+              )}
+              <div className={`grid grid-cols-3 ${compact ? 'gap-2' : 'gap-1.5'}`}>
                 <button
                   type="button"
                   onClick={() => setSelected(null)}
                   onMouseEnter={() => setHovered(null)}
-                  className={`rounded-xl transition border flex flex-col items-center justify-center ${
-                    compact ? 'py-2 px-1 min-h-[4.5rem]' : 'py-2 px-1.5 min-h-[4.25rem] lg:min-h-[3.75rem]'
+                  className={`rounded-lg transition border flex flex-col items-center justify-center ${
+                    compact ? 'py-2 px-1 min-h-[4.5rem]' : 'py-1 px-1 min-h-[3rem] lg:min-h-[2.75rem]'
                   } ${
                     selected === null
                       ? 'border-jc-gold/60 bg-jc-gold/5 text-bone'
@@ -801,10 +815,10 @@ export default function Configurator({
                 >
                   <span
                     className={`rounded-full border border-dashed border-bone/25 bg-bone/5 ${
-                      compact ? 'w-9 h-9 mb-1' : 'w-9 h-9 lg:w-8 lg:h-8 mb-1'
+                      compact ? 'w-9 h-9 mb-1' : 'w-7 h-7 mb-0.5'
                     }`}
                   />
-                  <span className={compact ? 'text-[10px]' : 'text-[10px] lg:text-[10px]'}>All</span>
+                  <span className={compact ? 'text-[10px]' : 'text-[9px] leading-tight'}>All</span>
                 </button>
                 {components.map(c => (
                   <PartInspectButton
@@ -822,31 +836,33 @@ export default function Configurator({
               </div>
             </div>
 
-            <div className={`border-t border-bone/10 text-bone/70 ${compact ? 'pt-3 text-xs shrink-0' : 'mt-auto pt-4 text-xs lg:text-[11px]'}`}>
-              <p className="text-[10px] text-jc-gold/80 tracking-[0.15em] uppercase mb-3 leading-relaxed">
+            <div className={`border-t border-bone/10 text-bone/70 shrink-0 ${compact ? 'pt-3 text-xs' : 'mt-auto pt-3 text-xs lg:text-[11px]'}`}>
+              <p className="text-[9px] text-jc-gold/80 tracking-[0.12em] uppercase mb-2 leading-snug">
                 {copy.editionLine}
               </p>
-              <div className="flex justify-between mb-2">
-                <span>Dragon</span>
-                <span className="text-bone">{dragonLabel}</span>
-              </div>
-              <div className="flex justify-between mb-2">
-                <span>Metal</span>
-                <span className="text-bone">{metalLabel}</span>
-              </div>
-              {keepOriginalGlobe && (
-                <div className="flex justify-between text-bone/50">
-                  <span>Globe</span>
-                  <span className="text-bone/80">
-                    {metals.find(m => m.id === globeMetal)?.label ?? globeMetal}
-                  </span>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 mb-2 text-[10px] lg:text-[11px]">
+                <div className="flex justify-between gap-2 col-span-2">
+                  <span className="text-bone/55">Dragon</span>
+                  <span className="text-bone text-right">{dragonLabel}</span>
                 </div>
-              )}
+                <div className="flex justify-between gap-2 col-span-2">
+                  <span className="text-bone/55">Metal</span>
+                  <span className="text-bone text-right">{metalLabel}</span>
+                </div>
+                {keepOriginalGlobe && (
+                  <div className="flex justify-between gap-2 col-span-2 text-bone/50">
+                    <span>Globe</span>
+                    <span className="text-bone/80 text-right">
+                      {metals.find(m => m.id === globeMetal)?.label ?? globeMetal}
+                    </span>
+                  </div>
+                )}
+              </div>
 
               <button
                 type="button"
                 onClick={() => void copyConfigLink()}
-                className="mt-3 w-full rounded-lg border border-bone/15 hover:border-bone/35 py-2 text-[10px] uppercase tracking-[0.22em] text-bone/65 hover:text-bone transition"
+                className="w-full rounded-lg border border-bone/15 hover:border-bone/35 py-2 text-[10px] uppercase tracking-[0.22em] text-bone/65 hover:text-bone transition"
               >
                 {shareStatus === 'copied' ? copy.shareLinkCopied : copy.shareLinkLabel}
               </button>
@@ -858,7 +874,7 @@ export default function Configurator({
                     onClick={handleArClick}
                     onMouseEnter={onArButtonHover}
                     onFocus={onArButtonHover}
-                    className="mt-4 group relative w-full rounded-full overflow-hidden
+                    className="mt-3 group relative w-full rounded-full overflow-hidden
                                border border-jc-gold/50 hover:border-jc-gold
                                bg-gradient-to-r from-jc-gold/10 via-jc-gold/5 to-jc-gold/10
                                py-2.5 px-4 transition-all duration-300
@@ -889,7 +905,7 @@ export default function Configurator({
         </div>
       </div>
 
-      {arMode === 'ar' && (
+      {arMode === 'ar' && arUiReady && (
         <ArView
           catalog={catalog}
           ar={arSettings}
@@ -897,7 +913,7 @@ export default function Configurator({
           initialMetal={metal}
           alt={`Astronomia Dragon — ${configLabel}`}
           onClose={closeAr}
-          autoActivate={mobileAr}
+          autoActivate={mobileAr && !isIosDevice()}
         />
       )}
       {arMode === 'qr' && (
@@ -934,9 +950,9 @@ function DragonVariantChip({
       type="button"
       title={`${label} — ${sub}`}
       onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-lg border text-left transition shrink-0 ${
-        horizontal ? 'min-w-[9.5rem] px-2.5 py-2' : 'w-full'
-      } ${compact && !horizontal ? 'p-2' : horizontal ? '' : 'px-2 py-1.5'} ${
+      className={`flex items-center gap-2 rounded-lg border text-left transition shrink-0 ${
+        horizontal ? 'min-w-[9.5rem] px-2.5 py-2' : 'w-full px-2.5 py-2'
+      } ${compact && !horizontal ? 'p-2' : horizontal ? '' : ''} ${
         selected
           ? 'border-jc-gold/60 bg-jc-gold/5'
           : 'border-bone/10 hover:border-bone/30'
@@ -947,12 +963,12 @@ function DragonVariantChip({
         style={{ background: swatch }}
       />
       <span className="min-w-0 flex-1">
-        <span className={`block text-bone truncate ${compact ? 'text-[11px]' : 'text-[10px] leading-tight'}`}>
+        <span className={`block text-bone leading-snug ${compact ? 'text-[11px]' : 'text-[11px]'}`}>
           {label}
         </span>
-        {(compact || horizontal) && (
-          <span className="block text-[9px] text-bone/45 truncate leading-tight">{sub}</span>
-        )}
+        <span className="block text-[9px] text-bone/45 leading-snug mt-0.5">
+          {sub}
+        </span>
       </span>
     </button>
   );
@@ -999,8 +1015,8 @@ function PartInspectButton({
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      className={`rounded-xl transition border flex flex-col items-center ${
-        compact ? 'py-2 px-1 min-h-[4.5rem]' : 'py-2 px-1.5 min-h-[4.25rem] lg:min-h-[3.75rem]'
+      className={`rounded-lg transition border flex flex-col items-center ${
+        compact ? 'py-2 px-1 min-h-[4.5rem]' : 'py-1 px-1 min-h-[3rem] lg:min-h-[2.75rem]'
       } ${
         active
           ? 'border-jc-gold/60 bg-jc-gold/10 text-bone'
@@ -1010,14 +1026,14 @@ function PartInspectButton({
       }`}
     >
       <span
-        className={`rounded-full overflow-hidden border shrink-0 bg-ink/80 ${
-          compact ? 'w-9 h-9 mb-1' : 'w-9 h-9 lg:w-8 lg:h-8 mb-1'
+        className={`rounded-full overflow-hidden border shrink-0 bg-ink/80 mb-0.5 ${
+          compact ? 'w-9 h-9' : 'w-7 h-7'
         } ${active ? 'border-jc-gold/50 ring-1 ring-jc-gold/25' : 'border-bone/15'}`}
       >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={iconUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
       </span>
-      <span className={`text-center leading-tight ${compact ? 'text-[10px]' : 'text-[10px] lg:text-[10px]'}`}>
+      <span className={`text-center leading-tight px-0.5 ${compact ? 'text-[10px]' : 'text-[9px]'}`}>
         {label}
       </span>
     </button>

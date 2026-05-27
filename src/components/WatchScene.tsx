@@ -15,6 +15,7 @@ import { WebGlContextListener } from '@/components/WebGlContextListener';
 import { getDeviceTier } from '@/lib/deviceTier';
 import { resolveRenderQuality } from '@/lib/renderQuality';
 import { heroWatchUrl } from '@/lib/resolveModelUrl';
+import { softenPbrMaterials } from '@/lib/softenPbrMaterials';
 import { DEFAULT_CATALOG, type SiteCatalog } from '@/lib/siteConfigTypes';
 import { PerformanceOverlayPanel, PerformanceSampler } from '@/components/PerformanceOverlay';
 
@@ -35,6 +36,10 @@ function Watch({ scrollProgress, settings, catalog, useOptimizedAssets, onReady 
   const { actions, mixer } = useAnimations(gltf.animations, group);
 
   useEffect(() => () => { useGLTF.clear(url); }, [url]);
+
+  useEffect(() => {
+    softenPbrMaterials(gltf.scene);
+  }, [gltf.scene]);
 
   const explodeClip = useMemo(
     () => gltf.animations.find((c: THREE.AnimationClip) => c.name.includes('Exploded')) ?? null,
@@ -122,8 +127,8 @@ function SceneLights({ settings }: { settings: SceneSettings }) {
   return (
     <>
       <ambientLight intensity={settings.heroAmbient} />
-      <directionalLight position={[3, 4, 5]} intensity={settings.heroKey} color="#fff5e0" />
-      <directionalLight position={[-4, 2, -3]} intensity={settings.heroRim} color="#b4904e" />
+      <directionalLight position={[2.5, 3.5, 4]} intensity={settings.heroKey} color="#fff5e0" />
+      <directionalLight position={[-3, 1.5, -2.5]} intensity={settings.heroRim} color="#b4904e" />
       <directionalLight position={[0, -2, 3]} intensity={settings.heroKicker} color="#6a8db3" />
     </>
   );
@@ -209,9 +214,9 @@ export default function WatchScene({
           {!isLowTier && (
             <ContactShadows
               position={[0, -1.2, 0]}
-              opacity={0.45}
+              opacity={0.24}
               scale={5}
-              blur={2.6}
+              blur={3.2}
               far={2}
             />
           )}

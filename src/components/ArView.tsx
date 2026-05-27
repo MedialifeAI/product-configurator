@@ -2,6 +2,7 @@
 
 import { AR_MODEL_USDZ } from '@/lib/ar';
 import { AR_MODEL_GLB_FALLBACK } from '@/lib/ar';
+import { isIosDevice } from '@/lib/ar';
 import {
   buildArPresets,
   computeModelViewerScale,
@@ -18,7 +19,7 @@ import {
   isLargeArAsset,
   probeAssetByteSize,
 } from '@/lib/arAssetSize';
-import { arWatchUrl } from '@/lib/resolveModelUrl';
+import { arWatchUrl, getArUsdzPath } from '@/lib/resolveModelUrl';
 import type { DragonId, MetalId, SiteCatalog } from '@/lib/siteConfigTypes';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -104,6 +105,7 @@ export default function ArView({
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(false);
   const [iosUsdz, setIosUsdz] = useState<string | undefined>(undefined);
+  const [iosUsdzChecked, setIosUsdzChecked] = useState(false);
   const [dragon, setDragon] = useState(initialDragon);
   const [metal, setMetal] = useState(initialMetal);
 
@@ -120,6 +122,18 @@ export default function ArView({
     () => resolveArComboModelUrl(catalog, dragon, metal, ar),
     [catalog, dragon, metal, ar],
   );
+  const iosSrcResolved = useMemo(() => {
+    if (iosSrc !== AR_MODEL_USDZ) return iosSrc;
+    return getArUsdzPath(arWatchUrl(catalog));
+  }, [catalog, iosSrc]);
+  const iosUsdzCandidates = useMemo(() => {
+    const list = [
+      '/api/models/full_watch/watch_full_ar.usdz',
+      iosSrcResolved,
+      AR_MODEL_USDZ,
+    ];
+    return [...new Set(list)];
+  }, [iosSrcResolved]);
   const [src, setSrc] = useState(primarySrc);
 
   useEffect(() => {
@@ -154,6 +168,9 @@ export default function ArView({
   }, [catalog, dragon, metal]);
 
   const usesSharedArAsset = src === arWatchUrl(catalog);
+  const ios = useMemo(() => isIosDevice(), []);
+  const arModes = ios ? 'quick-look' : 'webxr scene-viewer quick-look';
+  const iosNeedsUsdz = ios && iosUsdzChecked && !iosUsdz;
 
   const setViewerRef = (el: HTMLElement | null) => {
     viewerRef.current = el as ModelViewerElement | null;
@@ -174,15 +191,30 @@ export default function ArView({
 
   useEffect(() => {
     let cancelled = false;
-    fetch(iosSrc, { method: 'HEAD' })
-      .then(res => {
-        if (!cancelled && res.ok) setIosUsdz(iosSrc);
-      })
-      .catch(() => {});
+    setIosUsdzChecked(false);
+    setIosUsdz(undefined);
+
+    (async () => {
+      for (const candidate of iosUsdzCandidates) {
+        try {
+          const res = await fetch(candidate, { method: 'HEAD' });
+          if (cancelled) return;
+          if (res.ok) {
+            setIosUsdz(candidate);
+            setIosUsdzChecked(true);
+            return;
+          }
+        } catch {
+          /* try next */
+        }
+      }
+      if (!cancelled) setIosUsdzChecked(true);
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [iosSrc]);
+  }, [iosUsdzCandidates]);
 
   useEffect(() => {
     let cancelled = false;
@@ -283,6 +315,17 @@ export default function ArView({
     setLoadKey(k => k + 1);
   };
 
+  useEffect(() => {
+    return () => {
+      const el = viewerRef.current;
+      try {
+        el?.pause?.();
+      } catch {
+        /* optional */
+      }
+    };
+  }, []);
+
   const arScaleAttr = ar.lockRealWorldScale ? 'fixed' : 'auto';
 
   return (
@@ -308,20 +351,38 @@ export default function ArView({
       </div>
 
       <div className="flex-1 relative min-h-0 bg-[#0a0a0c]">
-        {ready && !error ? (
+        {iosNeedsUsdz ? (
+          <div className="absolute inset-0 flex items-center justify-center px-8">
+            <div className="text-center max-w-sm">
+              <p className="text-bone/80 text-sm leading-relaxed">
+                iOS AR needs a USDZ file at{' '}
+                <code className="text-bone/55">{iosSrcResolved}</code>. Run{' '}
+                <code className="text-bone/55">npm run build:usdz</code> locally, then deploy the
+                generated file with the site.
+              </p>
+              <button
+                type="button"
+                onClick={onClose}
+                className="mt-6 text-xs uppercase tracking-[0.25em] text-jc-gold border border-jc-gold/40 hover:bg-jc-gold/10 rounded-lg px-4 py-2 transition"
+              >
+                Back to configurator
+              </button>
+            </div>
+          </div>
+        ) : ready && !error ? (
           <model-viewer
             key={`${loadKey}-${src}`}
             ref={setViewerRef}
             src={src}
             {...(iosUsdz ? { 'ios-src': iosUsdz } : {})}
             ar
-            ar-modes="webxr scene-viewer quick-look"
+            ar-modes={arModes}
             ar-placement="floor"
             ar-scale={arScaleAttr}
             camera-controls
             touch-action="pan-y"
-            auto-rotate={ar.autoRotateInPreview}
-            shadow-intensity={ar.shadowIntensity}
+            auto-rotate={!ios && ar.autoRotateInPreview}
+            shadow-intensity={ios ? 0 : ar.shadowIntensity}
             exposure={String(ar.exposure)}
             tone-mapping="commerce"
             interpolation-decay={400}
@@ -329,7 +390,7 @@ export default function ArView({
             min-camera-orbit={ar.minCameraOrbit}
             max-camera-orbit={ar.maxCameraOrbit}
             alt={alt}
-            loading="eager"
+            loading={ios ? 'lazy' : 'eager'}
             reveal="auto"
             onLoad={onModelLoad}
             onError={() => {

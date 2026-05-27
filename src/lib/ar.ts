@@ -40,6 +40,21 @@ export function isMobileArDevice(): boolean {
   return navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform);
 }
 
+/** iPhone / iPad / iPadOS-on-Mac — used for Quick Look–only AR and GPU handoff. */
+export function isIosDevice(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent;
+  if (/iPhone|iPad|iPod/i.test(ua)) return true;
+  return navigator.maxTouchPoints > 1 && /Mac/.test(navigator.platform);
+}
+
+export const AR_SESSION_EVENT = 'jacob-ar-session';
+
+export function setArSessionOpen(open: boolean): void {
+  if (typeof window === 'undefined') return;
+  window.dispatchEvent(new CustomEvent(AR_SESSION_EVENT, { detail: { open } }));
+}
+
 export function parseArSearchParams(search: string): ParsedArParams {
   const params = new URLSearchParams(search);
   const dragon = params.get('dragon');

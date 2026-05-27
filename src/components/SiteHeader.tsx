@@ -18,10 +18,12 @@ export default function SiteHeader() {
   return (
     <header
       className={`fixed top-0 inset-x-0 z-50 transition-all duration-500 ${
-        scrolled ? 'py-3 backdrop-blur-md bg-ink/60 border-b border-bone/10' : 'py-6'
+        scrolled
+          ? 'py-2 md:py-3 backdrop-blur-md bg-ink/60 border-b border-bone/10'
+          : 'py-4 md:py-6'
       }`}
     >
-      <div className="max-w-7xl mx-auto px-6 md:px-12 flex items-center">
+      <div className="max-w-7xl mx-auto px-5 md:px-12 flex items-center">
         <a
           href="#"
           className="font-display text-[26px] md:text-[30px] leading-none tracking-wider text-bone"

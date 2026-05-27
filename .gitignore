@@ -18,6 +18,9 @@ dist/
 .DS_Store
 *.pem
 Thumbs.db
+.cache-compress/
+public/models-optimized/
+public/models/full_watch/*.usdz
 
 # debug
 npm-debug.log*

@@ -1,5 +1,6 @@
 import type { SceneSettings } from '@/context/SceneSettings';
 import { DEFAULT_SETTINGS } from '@/context/SceneSettings';
+import { harmonizeHeroLighting } from '@/lib/harmonizeHeroLighting';
 
 export const SCENE_SETTINGS_SCOPE = 'site';
 export const SCENE_SETTINGS_API = '/api/scene-settings';
@@ -30,7 +31,7 @@ function persistableModelUrl(url: string | null): string | null {
 
 export function mergeWithDefaults(partial: Partial<SceneSettings> | null): SceneSettings {
   if (!partial || typeof partial !== 'object') return DEFAULT_SETTINGS;
-  return {
+  return harmonizeHeroLighting({
     ...DEFAULT_SETTINGS,
     ...partial,
     heroModelUrl: partial.heroModelUrl ?? DEFAULT_SETTINGS.heroModelUrl,
@@ -39,7 +40,7 @@ export function mergeWithDefaults(partial: Partial<SceneSettings> | null): Scene
     configBackgrounds: partial.configBackgrounds?.length
       ? partial.configBackgrounds
       : DEFAULT_SETTINGS.configBackgrounds,
-  };
+  });
 }
 
 export function adminHeaders(): HeadersInit {

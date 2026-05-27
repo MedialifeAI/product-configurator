@@ -342,19 +342,7 @@ export default function ArView({
               backgroundColor: '#0a0a0c',
               ['--poster-color' as string]: '#0a0a0c',
             }}
-          >
-            <button
-              slot="ar-button"
-              type="button"
-              className="ar-slot-button"
-              aria-label="Launch augmented reality"
-            >
-              Place in your space
-            </button>
-            <div slot="ar-prompt" className="ar-slot-prompt">
-              {ar.tapToPlaceHint}
-            </div>
-          </model-viewer>
+          />
         ) : error ? (
           <div className="absolute inset-0 flex items-center justify-center px-8">
             <div className="text-center max-w-sm">
@@ -409,6 +397,26 @@ export default function ArView({
                 </p>
               )}
             </div>
+          </div>
+        )}
+
+        {loaded && (
+          <div
+            className="absolute inset-x-0 bottom-0 z-20 flex flex-col items-center gap-2.5 px-4 pt-8 pointer-events-none"
+            style={{
+              paddingBottom: 'max(1.25rem, env(safe-area-inset-bottom))',
+              background: 'linear-gradient(to top, rgba(10,10,12,0.92) 0%, rgba(10,10,12,0.55) 55%, transparent 100%)',
+            }}
+          >
+            <p className="ar-slot-prompt pointer-events-none">{ar.tapToPlaceHint}</p>
+            <button
+              type="button"
+              onClick={tryActivateAr}
+              className="ar-slot-button pointer-events-auto"
+              aria-label="Launch augmented reality"
+            >
+              Place in your space
+            </button>
           </div>
         )}
 

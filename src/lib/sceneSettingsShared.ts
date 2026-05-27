@@ -35,6 +35,7 @@ export function mergeWithDefaults(partial: Partial<SceneSettings> | null): Scene
     ...partial,
     heroModelUrl: partial.heroModelUrl ?? DEFAULT_SETTINGS.heroModelUrl,
     configModelUrl: partial.configModelUrl ?? DEFAULT_SETTINGS.configModelUrl,
+    configYaw: partial.configYaw ?? DEFAULT_SETTINGS.configYaw,
   };
 }
 

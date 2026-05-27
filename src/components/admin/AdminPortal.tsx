@@ -165,8 +165,40 @@ function StatusLine({ status, lastSavedAt }: { status: PersistStatus; lastSavedA
 }
 
 function OverviewTab({ config, setTab }: { config: SiteConfig; setTab: (t: Tab) => void }) {
+  const yawDeg = Math.round((config.scene.configYaw * 180) / Math.PI);
+  const checklist = [
+    { ok: !config.features.showSceneControls, label: 'Scene-controls gear hidden on public site' },
+    { ok: config.features.showArButton, label: 'View in AR enabled' },
+    { ok: !config.ar.usePerComboArModels, label: 'Fast AR mode (single compressed GLB)' },
+    { ok: yawDeg === 180 || yawDeg === 0, label: `Configurator yaw set (${yawDeg}° — dial toward camera)` },
+  ];
+
   return (
     <div className="space-y-6">
+      <Card title="Client demo">
+        <a
+          href="/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-2 text-sm text-jc-gold border border-jc-gold/40 rounded-lg px-4 py-2.5 hover:bg-jc-gold/10 transition"
+        >
+          Open live site preview ↗
+        </a>
+        <ul className="mt-4 space-y-2 text-sm text-bone/70">
+          {checklist.map(item => (
+            <li key={item.label} className="flex items-start gap-2">
+              <span className={item.ok ? 'text-jc-gold' : 'text-amber-300/90'} aria-hidden>
+                {item.ok ? '✓' : '○'}
+              </span>
+              {item.label}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-3 text-[11px] text-bone/45 leading-relaxed">
+          Before a client meeting: test AR on phone, confirm hero/config GLBs are compressed in Network tab,
+          and copy a configuration link from the configurator.
+        </p>
+      </Card>
       <Card title="Quick actions">
         <div className="grid sm:grid-cols-2 gap-3">
           {TABS.filter(t => t.id !== 'overview').map(t => (
@@ -355,6 +387,17 @@ function SceneTab({
       <Card title="Configurator">
         <Slider label="Scale" value={s.configScale} min={0.3} max={2.5} step={0.05} onChange={v => set('configScale', v)} />
         <Slider label="Auto-rotate" value={s.configRotate} min={0} max={5} step={0.1} onChange={v => set('configRotate', v)} />
+        <Slider
+          label="Watch yaw (°)"
+          value={Math.round((s.configYaw * 180) / Math.PI)}
+          min={0}
+          max={360}
+          step={1}
+          onChange={v => set('configYaw', (v * Math.PI) / 180)}
+        />
+        <p className="text-[10px] text-bone/45 -mt-2">
+          Dial toward camera. Default 180° (π rad) for exported GLBs that load facing away.
+        </p>
       </Card>
       <button
         type="button"
@@ -721,12 +764,23 @@ function ContentTab({
         <Field label="Title line 2" value={c.hero.titleLine2} onChange={v => patch({ hero: { ...c.hero, titleLine2: v } })} />
         <Field label="Body" value={c.hero.body} onChange={v => patch({ hero: { ...c.hero, body: v } })} multiline />
         <Field label="Scroll hint" value={c.hero.scrollHint} onChange={v => patch({ hero: { ...c.hero, scrollHint: v } })} />
+        <Field
+          label="Explore configurator CTA"
+          value={c.hero.exploreConfiguratorLabel}
+          onChange={v => patch({ hero: { ...c.hero, exploreConfiguratorLabel: v } })}
+        />
+        <Field label="Loader title" value={c.hero.loadingTitle} onChange={v => patch({ hero: { ...c.hero, loadingTitle: v } })} />
+        <Field label="Loader subtitle" value={c.hero.loadingSubtitle} onChange={v => patch({ hero: { ...c.hero, loadingSubtitle: v } })} />
       </Card>
       <Card title="Configurator copy">
         <Field label="Eyebrow" value={c.configurator.eyebrow} onChange={v => patch({ configurator: { ...c.configurator, eyebrow: v } })} />
         <Field label="Title" value={c.configurator.title} onChange={v => patch({ configurator: { ...c.configurator, title: v } })} />
         <Field label="Description" value={c.configurator.description} onChange={v => patch({ configurator: { ...c.configurator, description: v } })} multiline />
+        <Field label="Edition line" value={c.configurator.editionLine} onChange={v => patch({ configurator: { ...c.configurator, editionLine: v } })} />
+        <Field label="Share link label" value={c.configurator.shareLinkLabel} onChange={v => patch({ configurator: { ...c.configurator, shareLinkLabel: v } })} />
+        <Field label="Reset view label" value={c.configurator.resetViewLabel} onChange={v => patch({ configurator: { ...c.configurator, resetViewLabel: v } })} />
         <Field label="AR button" value={c.configurator.arButtonLabel} onChange={v => patch({ configurator: { ...c.configurator, arButtonLabel: v } })} />
+        <Field label="AR size hint" value={c.configurator.arSizeHint} onChange={v => patch({ configurator: { ...c.configurator, arSizeHint: v } })} multiline />
       </Card>
       <Card title="Story panels">
         {c.storyPanels.map((panel, i) => (

@@ -29,9 +29,10 @@ interface WatchProps {
   scrollProgress: React.MutableRefObject<number>;
   settings: SceneSettings;
   catalog: SiteCatalog;
+  onReady?: () => void;
 }
 
-function Watch({ scrollProgress, settings, catalog }: WatchProps) {
+function Watch({ scrollProgress, settings, catalog, onReady }: WatchProps) {
   const group = useRef<THREE.Group>(null);
   const url = heroWatchUrl(catalog, settings.heroModelUrl);
   const gltf = useGLTF(url) as any;
@@ -77,6 +78,13 @@ function Watch({ scrollProgress, settings, catalog }: WatchProps) {
       a.paused = true; // we'll drive time manually
     }
   }, [actions, explodeClip, movementClip]);
+
+  const readyNotified = useRef(false);
+  useEffect(() => {
+    if (readyNotified.current || !gltf.scene) return;
+    readyNotified.current = true;
+    onReady?.();
+  }, [gltf.scene, onReady]);
 
   // Each frame: ease the explode action toward the scroll target so micro-scroll
   // jitter doesn't translate 1:1 into frame jumps. Advance the mixer for the
@@ -167,6 +175,7 @@ interface WatchSceneProps {
   className?: string;
   settings?: SceneSettings;
   catalog?: SiteCatalog;
+  onReady?: () => void;
 }
 
 export default function WatchScene({
@@ -174,6 +183,7 @@ export default function WatchScene({
   className,
   settings = DEFAULT_SETTINGS,
   catalog,
+  onReady,
 }: WatchSceneProps) {
   const cat = catalog ?? DEFAULT_CATALOG;
   return (
@@ -194,7 +204,7 @@ export default function WatchScene({
         {/* Studio HDR — drives PBR reflections for the metallic case + dragon.
             Dialed down so the headline copy reads cleanly over the watch. */}
         <Environment preset="studio" environmentIntensity={settings.heroEnv} />
-        <Watch scrollProgress={scrollProgress} settings={settings} catalog={cat} />
+        <Watch scrollProgress={scrollProgress} settings={settings} catalog={cat} onReady={onReady} />
         {/* Subtle product-photography shadow to ground the watch */}
         <ContactShadows
           position={[0, -1.2, 0]}

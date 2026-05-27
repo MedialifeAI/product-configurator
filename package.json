@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:config-url": "node scripts/test-config-url.mjs",
     "compress": "bash scripts/compress.sh",
     "compress:ar": "node scripts/compress-ar-hero.mjs",
     "strip:movement-globe": "node scripts/strip-globe-from-movement.mjs",

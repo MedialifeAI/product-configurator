@@ -5,6 +5,8 @@ export interface SceneSettings {
   heroSway: number;
   configScale: number;
   configRotate: number;
+  /** Y-axis rotation (radians) so dial faces the camera — π ≈ front for default export. */
+  configYaw: number;
   heroModelUrl: string | null;
   configModelUrl: string | null;
   heroAmbient: number;
@@ -22,6 +24,7 @@ export const DEFAULT_SETTINGS: SceneSettings = {
   heroSway: 0.28,
   configScale: 0.88,
   configRotate: 0.5,
+  configYaw: Math.PI,
   heroModelUrl: null,
   configModelUrl: null,
   heroAmbient: 0.108,

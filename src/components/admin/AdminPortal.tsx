@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import type { SceneSettings } from '@/context/SceneSettings';
 import {
@@ -940,8 +940,28 @@ function ModelSourceEditor({
   onChange: (s: ModelSource) => void;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const dragDepth = useRef(0);
+
+  const acceptList = acceptImages
+    ? ['.png', '.jpg', '.jpeg', '.webp', '.svg']
+    : ['.glb', '.gltf'];
+  const acceptAttr = acceptList.join(',');
+  const acceptMime = acceptImages ? /^image\// : /(model\/gltf|application\/octet-stream|gltf|glb)/i;
+
+  const isValidFile = (file: File): boolean => {
+    const ext = file.name.toLowerCase().split('.').pop();
+    if (ext && acceptList.includes(`.${ext}`)) return true;
+    return acceptMime.test(file.type);
+  };
 
   const upload = async (file: File) => {
+    if (!isValidFile(file)) {
+      setError(`Wrong file type — expected ${acceptList.join(' / ')}`);
+      return;
+    }
+    setError(null);
     setUploading(true);
     try {
       const form = new FormData();
@@ -952,12 +972,40 @@ function ModelSourceEditor({
         headers: adminHeaders(),
         body: form,
       });
-      if (!res.ok) throw new Error('upload failed');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `upload failed (${res.status})`);
+      }
       const json = (await res.json()) as { slot?: string };
       onChange({ type: 'blob', key: json.slot ?? uploadSlot });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
     }
+  };
+
+  // Drag-and-drop handlers. dragDepth ref counts nested enters so leaving a
+  // child element doesn't clear the highlight prematurely.
+  const onDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepth.current += 1;
+    if (e.dataTransfer.types.includes('Files')) setDragOver(true);
+  };
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer.types.includes('Files')) e.dataTransfer.dropEffect = 'copy';
+  };
+  const onDragLeave = () => {
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragOver(false);
+  };
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setDragOver(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) void upload(file);
   };
 
   return (
@@ -988,7 +1036,7 @@ function ModelSourceEditor({
           className="w-full rounded-lg bg-ink/50 border border-bone/10 px-3 py-2 text-xs text-bone"
           value={source.path}
           onChange={e => onChange({ type: 'builtin', path: e.target.value })}
-          placeholder={acceptImages ? '/images/parts/dragon.webp' : '/models/...'}
+          placeholder={acceptImages ? '/images/activated-print.jpg' : '/models/...'}
         />
       )}
       {source.type === 'url' && (
@@ -996,17 +1044,26 @@ function ModelSourceEditor({
           className="w-full rounded-lg bg-ink/50 border border-bone/10 px-3 py-2 text-xs text-bone"
           value={source.url}
           onChange={e => onChange({ type: 'url', url: e.target.value })}
-          placeholder="https://cdn.example.com/model.glb"
+          placeholder={acceptImages ? 'https://cdn.example.com/poster.jpg' : 'https://cdn.example.com/model.glb'}
         />
       )}
       {source.type === 'blob' && (
-        <div className="flex items-center gap-2">
-          <label className="cursor-pointer text-xs text-jc-gold border border-jc-gold/30 px-3 py-1.5 rounded-lg hover:bg-jc-gold/10">
-            {uploading ? 'Uploading…' : acceptImages ? 'Upload image' : 'Upload .glb'}
+        <div
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          className={`relative rounded-lg border-2 border-dashed transition px-4 py-5 text-center cursor-pointer ${
+            dragOver
+              ? 'border-jc-gold/70 bg-jc-gold/10'
+              : 'border-bone/15 bg-ink/30 hover:border-bone/30'
+          } ${uploading ? 'pointer-events-none opacity-70' : ''}`}
+        >
+          <label className="block cursor-pointer">
             <input
               type="file"
-              accept={acceptImages ? '.png,.jpg,.jpeg,.webp,.svg' : '.glb,.gltf'}
-              className="hidden"
+              accept={acceptAttr}
+              className="sr-only"
               disabled={uploading}
               onChange={e => {
                 const f = e.target.files?.[0];
@@ -1014,8 +1071,28 @@ function ModelSourceEditor({
                 e.target.value = '';
               }}
             />
+            <div className="text-xs text-bone/80 leading-relaxed">
+              {uploading ? (
+                <span className="text-jc-gold">Uploading…</span>
+              ) : (
+                <>
+                  <span className="text-jc-gold underline-offset-2 hover:underline">
+                    {acceptImages ? 'Choose image' : 'Choose file'}
+                  </span>
+                  <span className="text-bone/45"> or drag & drop here</span>
+                </>
+              )}
+            </div>
+            <div className="mt-1 text-[10px] text-bone/35 font-mono">
+              {acceptList.join(' · ')} &nbsp;·&nbsp; max 120 MB
+            </div>
           </label>
-          <span className="text-[10px] text-bone/40 truncate">/api/models/{source.key}</span>
+          {error && (
+            <div className="mt-2 text-[10px] text-amber-300/90">{error}</div>
+          )}
+          <div className="mt-2 text-[10px] text-bone/40 truncate">
+            Current: <code className="text-bone/55">/api/models/{source.key}</code>
+          </div>
         </div>
       )}
     </div>
@@ -1155,10 +1232,13 @@ function ContentTab({
           onChange={v => patch({ activatedPrint: { ...c.activatedPrint, body: v } })}
           multiline
         />
-        <Field
-          label="Image URL (paste a /images/… path or an absolute https URL)"
-          value={c.activatedPrint?.imageUrl ?? ''}
-          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, imageUrl: v } })}
+        <ModelSourceEditor
+          label="Poster image (drag & drop to upload, paste a /images/… path, or supply an https URL)"
+          source={c.activatedPrint?.imageSource ?? { type: 'builtin', path: '/images/activated-print.jpg' }}
+          uploadSlot="images/activated-print"
+          builtinDefault="/images/activated-print.jpg"
+          acceptImages
+          onChange={src => patch({ activatedPrint: { ...c.activatedPrint, imageSource: src } })}
         />
         <Field
           label="Image alt text"

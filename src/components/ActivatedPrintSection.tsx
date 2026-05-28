@@ -13,6 +13,7 @@
 
 import { motion } from 'framer-motion';
 import { useSiteConfig } from '@/context/SiteConfigProvider';
+import { resolveSource } from '@/lib/resolveModelUrl';
 
 export default function ActivatedPrintSection() {
   const { config } = useSiteConfig();
@@ -20,6 +21,9 @@ export default function ActivatedPrintSection() {
 
   if (!print || !print.enabled) return null;
 
+  const imageUrl = print.imageSource
+    ? resolveSource(print.imageSource, '/images/activated-print.jpg')
+    : '/images/activated-print.jpg';
   const hasCta = Boolean(print.ctaLabel && print.ctaHref);
 
   return (
@@ -47,10 +51,10 @@ export default function ActivatedPrintSection() {
           {/* Gold hairline frame */}
           <div className="absolute -inset-px rounded-2xl bg-gradient-to-br from-jc-gold/40 via-jc-gold/10 to-transparent" />
           <div className="relative rounded-2xl overflow-hidden bg-carbon">
-            {print.imageUrl ? (
+            {imageUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={print.imageUrl}
+                src={imageUrl}
                 alt={print.imageAlt || print.title}
                 className="block w-full h-auto select-none"
                 loading="lazy"
@@ -58,7 +62,7 @@ export default function ActivatedPrintSection() {
               />
             ) : (
               <div className="aspect-[3/4] flex items-center justify-center text-center px-6 text-bone/40 text-xs tracking-[0.25em] uppercase">
-                Set image URL in admin
+                Upload an image in admin
               </div>
             )}
           </div>

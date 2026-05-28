@@ -258,7 +258,12 @@ export interface SiteContent {
     eyebrow: string;
     title: string;
     body: string;
-    imageUrl: string;
+    /**
+     * Image source. Either a builtin static path (/images/…), an external
+     * https URL, or an admin-uploaded blob key. Resolved via resolveSource()
+     * the same way model GLBs are.
+     */
+    imageSource: ModelSource;
     imageAlt: string;
     ctaLabel: string;
     ctaHref: string;
@@ -504,7 +509,7 @@ export const DEFAULT_CONTENT: SiteContent = {
     title: 'Experience Activated Print',
     body:
       'Scan the catalog. Watch the Astronomia Dragon come alive in your space. A printed page, an animated tourbillon — one continuous artifact.',
-    imageUrl: '/images/activated-print.jpg',
+    imageSource: { type: 'builtin', path: '/images/activated-print.jpg' },
     imageAlt: 'Astronomia Dragon — Activated Print catalog spread',
     ctaLabel: '',
     ctaHref: '',

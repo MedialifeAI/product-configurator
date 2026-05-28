@@ -12,6 +12,7 @@ export function releaseConfiguratorGltfCache(
 ): void {
   const urlOpts = {
     useOptimizedAssets: config.featureFlags?.useOptimizedAssets,
+    useIosAssets: config.featureFlags?.useIosAssets,
     globeMetal,
   };
 

@@ -27,6 +27,7 @@ interface WatchProps {
   settings: SceneSettings;
   catalog: SiteCatalog;
   useOptimizedAssets?: boolean;
+  useIosAssets?: boolean;
   scaleBoost?: number;
   onReady?: () => void;
 }
@@ -36,11 +37,12 @@ function Watch({
   settings,
   catalog,
   useOptimizedAssets,
+  useIosAssets,
   scaleBoost = 1,
   onReady,
 }: WatchProps) {
   const group = useRef<THREE.Group>(null);
-  const url = heroWatchUrl(catalog, settings.heroModelUrl, { useOptimizedAssets });
+  const url = heroWatchUrl(catalog, settings.heroModelUrl, { useOptimizedAssets, useIosAssets });
   const gltf = useGLTF(url) as any;
   const { actions, mixer } = useAnimations(gltf.animations, group);
 
@@ -213,12 +215,22 @@ export default function WatchScene({
           <PerformanceSampler enabled={showPerformanceOverlay} sourceId={perfSourceId} />
           <ToneExposure value={settings.heroExposure} />
           <SceneLights settings={settings} />
-          <Environment preset="studio" environmentIntensity={settings.heroEnv} />
+          {/*
+            HDR environment runs at a tiny resolution on iOS (cubemap drops from
+            ~24MB to ~100KB GPU) so metallic surfaces still pick up reflections.
+            Other platforms keep the full studio environment.
+          */}
+          <Environment
+            preset="studio"
+            environmentIntensity={settings.heroEnv}
+            resolution={quality.useIosAssets ? 64 : 256}
+          />
           <Watch
             scrollProgress={scrollProgress}
             settings={settings}
             catalog={cat}
             useOptimizedAssets={quality.useOptimizedAssets}
+            useIosAssets={quality.useIosAssets}
             scaleBoost={isDesktop ? 1.14 : 1}
             onReady={onReady}
           />

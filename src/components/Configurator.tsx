@@ -140,7 +140,7 @@ function useWatchFit(fitUrl: string) {
 
 function AssembledWatch({
   dragon, metal, globeMetal, highlight, settings, catalog, config, scaleMultiplier = 1,
-  useOptimizedAssets,
+  useOptimizedAssets, useIosAssets,
 }: {
   dragon: DragonId;
   metal: MetalId;
@@ -152,17 +152,28 @@ function AssembledWatch({
   /** Responsive shrink on phones / narrow viewports. */
   scaleMultiplier?: number;
   useOptimizedAssets?: boolean;
+  useIosAssets?: boolean;
 }) {
   const isDim = (id: ComponentId) => highlight !== null && highlight !== id;
   const urlOpts = {
     globeMetal,
     useOptimizedAssets: useOptimizedAssets ?? config.featureFlags?.useOptimizedAssets,
+    useIosAssets: useIosAssets ?? config.featureFlags?.useIosAssets,
     consolidatedMetals: config.featureFlags?.consolidatedMetals,
   };
   const parts = getConfiguratorPartUrls(catalog, metal, urlOpts);
   const fit = useWatchFit(parts.caseBody);
   const scale = fit.scale * settings.configScale * scaleMultiplier;
-  const dragonUrl = getDragonUrl(catalog, dragon, config);
+  // Synthesize a config-shaped object so getDragonUrl picks up the runtime
+  // useIosAssets value rather than the persisted feature flag.
+  const dragonUrl = getDragonUrl(catalog, dragon, {
+    ...config,
+    featureFlags: {
+      ...config.featureFlags,
+      useOptimizedAssets: urlOpts.useOptimizedAssets,
+      useIosAssets: urlOpts.useIosAssets,
+    },
+  });
   const consolidated = config.featureFlags?.consolidatedMetals ?? false;
   const metalOverrides = config.materialOverrides?.metal ?? DEFAULT_METAL_OVERRIDES;
   const metalOverride: MetalOverride = metalOverrides[metal] ?? DEFAULT_METAL_OVERRIDES[metal];
@@ -236,9 +247,12 @@ type OrbitControlsApi = { reset: () => void };
 function ConfiguratorLighting({
   settings,
   compact,
+  useIosAssets,
 }: {
   settings: SceneSettings;
   compact?: boolean;
+  /** Drop the studio cubemap resolution on iOS (~24MB → ~100KB GPU). */
+  useIosAssets?: boolean;
 }) {
   const gl = useThree(s => s.gl);
   useEffect(() => {
@@ -255,7 +269,11 @@ function ConfiguratorLighting({
       <directionalLight position={[2.5, 3.5, 4]} intensity={settings.configKey} color="#fff5e0" />
       <directionalLight position={[-3, 1.5, -2.5]} intensity={settings.configRim} color="#b4904e" />
       <directionalLight position={[0, -2, 3]} intensity={settings.configKicker} color="#6a8db3" />
-      <Environment preset="studio" environmentIntensity={envIntensity} />
+      <Environment
+        preset="studio"
+        environmentIntensity={envIntensity}
+        resolution={useIosAssets ? 64 : 256}
+      />
     </>
   );
 }
@@ -273,6 +291,7 @@ function ConfiguratorScene({
   showPerformanceOverlay,
   perfSourceId,
   useOptimizedAssets,
+  useIosAssets,
   onResetReady,
 }: {
   dragon: DragonId;
@@ -287,6 +306,7 @@ function ConfiguratorScene({
   showPerformanceOverlay: boolean;
   perfSourceId: string;
   useOptimizedAssets?: boolean;
+  useIosAssets?: boolean;
   onResetReady: (reset: () => void) => void;
 }) {
   const controlsRef = useRef<OrbitControlsApi | null>(null);
@@ -300,7 +320,7 @@ function ConfiguratorScene({
   return (
     <>
       <PerformanceSampler enabled={showPerformanceOverlay} sourceId={perfSourceId} />
-      <ConfiguratorLighting settings={settings} compact={compact} />
+      <ConfiguratorLighting settings={settings} compact={compact} useIosAssets={useIosAssets} />
       <Suspense fallback={null}>
         <AssembledWatch
           dragon={dragon}
@@ -312,6 +332,7 @@ function ConfiguratorScene({
           config={config}
           scaleMultiplier={scaleMultiplier}
           useOptimizedAssets={useOptimizedAssets}
+          useIosAssets={useIosAssets}
         />
       </Suspense>
       <OrbitControls
@@ -393,6 +414,7 @@ export default function Configurator({
 
   const urlOpts = {
     useOptimizedAssets: renderQuality.useOptimizedAssets,
+    useIosAssets: renderQuality.useIosAssets,
   };
 
   const [dragon, setDragon] = useState<DragonId>('v1');
@@ -401,12 +423,21 @@ export default function Configurator({
   const [pinnedGlobeMetal, setPinnedGlobeMetal] = useState<MetalId>('rose_gold');
   const globeMetal = keepOriginalGlobe ? pinnedGlobeMetal : metal;
 
-  useCatalogPreload(catalog, dragon, metal, globeMetal, urlOpts.useOptimizedAssets, isLowTier);
+  useCatalogPreload(
+    catalog,
+    dragon,
+    metal,
+    globeMetal,
+    urlOpts.useOptimizedAssets,
+    urlOpts.useIosAssets,
+    isLowTier,
+  );
 
   // Desktop / mid-tier: warm all variant GLBs once so swaps stay instant.
   useConfiguratorWarmPreload(
     catalog,
     urlOpts.useOptimizedAssets,
+    urlOpts.useIosAssets,
     canvasReady &&
       shouldWarmVariantPreload(settings.configModelQuality ?? 'auto', tier),
   );
@@ -565,6 +596,7 @@ export default function Configurator({
               config={config}
               scaleMultiplier={configScaleMultiplier}
               useOptimizedAssets={renderQuality.useOptimizedAssets}
+              useIosAssets={renderQuality.useIosAssets}
             />
           </Suspense>
           <OrbitControls
@@ -662,6 +694,7 @@ export default function Configurator({
                 showPerformanceOverlay={showPerf}
                 perfSourceId={perfSourceId}
                 useOptimizedAssets={renderQuality.useOptimizedAssets}
+                useIosAssets={renderQuality.useIosAssets}
                 onResetReady={onResetReady}
               />
             </Canvas>
@@ -1047,6 +1080,7 @@ function useCatalogPreload(
   metal: MetalId,
   globeMetal: MetalId,
   useOptimizedAssets?: boolean,
+  useIosAssets?: boolean,
   lowTier?: boolean,
 ) {
   useEffect(() => {
@@ -1063,8 +1097,13 @@ function useCatalogPreload(
       const p = getConfiguratorPartUrls(catalog, metal, {
         globeMetal,
         useOptimizedAssets,
+        useIosAssets,
       });
-      useGLTF.preload(getDragonUrl(catalog, dragon, { featureFlags: { useOptimizedAssets } }));
+      useGLTF.preload(
+        getDragonUrl(catalog, dragon, {
+          featureFlags: { useOptimizedAssets, useIosAssets },
+        }),
+      );
       useGLTF.preload(p.caseBody);
       useGLTF.preload(p.case);
       useGLTF.preload(p.movement);
@@ -1082,13 +1121,14 @@ function useCatalogPreload(
       if (idleId != null) window.cancelIdleCallback?.(idleId);
       if (timeoutId != null) window.clearTimeout(timeoutId);
     };
-  }, [catalog, dragon, metal, globeMetal, useOptimizedAssets, lowTier]);
+  }, [catalog, dragon, metal, globeMetal, useOptimizedAssets, useIosAssets, lowTier]);
 }
 
 /** One-time warm preload of every dragon + metal combo (skipped on iOS low tier). */
 function useConfiguratorWarmPreload(
   catalog: SiteCatalog,
   useOptimizedAssets: boolean | undefined,
+  useIosAssets: boolean | undefined,
   enabled: boolean,
 ) {
   const warmed = useRef(false);
@@ -1100,18 +1140,21 @@ function useConfiguratorWarmPreload(
     const run = () => {
       if (cancelled) return;
       warmed.current = true;
-      const flag = { featureFlags: { useOptimizedAssets } };
+      const flag = { featureFlags: { useOptimizedAssets, useIosAssets } };
       for (const d of catalog.dragons) {
         useGLTF.preload(getDragonUrl(catalog, d.id, flag));
       }
       for (const m of catalog.metals) {
-        const p = getConfiguratorPartUrls(catalog, m.id, { useOptimizedAssets });
+        const p = getConfiguratorPartUrls(catalog, m.id, { useOptimizedAssets, useIosAssets });
         useGLTF.preload(p.caseBody);
         useGLTF.preload(p.case);
         useGLTF.preload(p.movement);
         useGLTF.preload(p.globe);
       }
-      const staticParts = getConfiguratorPartUrls(catalog, 'rose_gold', { useOptimizedAssets });
+      const staticParts = getConfiguratorPartUrls(catalog, 'rose_gold', {
+        useOptimizedAssets,
+        useIosAssets,
+      });
       useGLTF.preload(staticParts.dial);
       useGLTF.preload(staticParts.hand);
       useGLTF.preload(staticParts.strap);
@@ -1125,5 +1168,5 @@ function useConfiguratorWarmPreload(
       if (idleId != null) window.cancelIdleCallback?.(idleId);
       if (timeoutId != null) window.clearTimeout(timeoutId);
     };
-  }, [catalog, useOptimizedAssets, enabled]);
+  }, [catalog, useOptimizedAssets, useIosAssets, enabled]);
 }

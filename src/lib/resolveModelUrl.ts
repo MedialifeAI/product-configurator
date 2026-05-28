@@ -10,6 +10,7 @@ import { builtinPartIconPath } from './siteConfigTypes';
 
 const MODELS_ROOT = '/models';
 const OPTIMIZED_ROOT = '/models-optimized';
+const IOS_ROOT = '/models-ios';
 
 /** Rewrite a builtin /models/… path to /models-optimized/… when enabled. */
 export function toOptimizedModelPath(path: string, useOptimized = false): string {
@@ -17,29 +18,47 @@ export function toOptimizedModelPath(path: string, useOptimized = false): string
   return `${OPTIMIZED_ROOT}${path.slice(MODELS_ROOT.length)}`;
 }
 
+/**
+ * Rewrite a builtin /models/… path to /models-ios/… (decimated meshes for iOS).
+ * iOS takes precedence over /models-optimized/: iOS-decimated files are the only
+ * version that fits within iOS Safari's per-tab memory budget.
+ */
+export function toIosModelPath(path: string, useIos = false): string {
+  if (!useIos || !path.startsWith(`${MODELS_ROOT}/`)) return path;
+  return `${IOS_ROOT}${path.slice(MODELS_ROOT.length)}`;
+}
+
+function applyAssetVariant(
+  path: string,
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean },
+): string {
+  if (options?.useIosAssets) return toIosModelPath(path, true);
+  if (options?.useOptimizedAssets) return toOptimizedModelPath(path, true);
+  return path;
+}
+
 export function resolveSource(
   src: ModelSource | undefined,
   fallback: string,
-  options?: { useOptimizedAssets?: boolean },
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean },
 ): string {
-  const useOptimized = options?.useOptimizedAssets ?? false;
-  if (!src) return toOptimizedModelPath(fallback, useOptimized);
+  if (!src) return applyAssetVariant(fallback, options);
   switch (src.type) {
     case 'builtin':
-      return toOptimizedModelPath(src.path?.trim() || fallback, useOptimized);
+      return applyAssetVariant(src.path?.trim() || fallback, options);
     case 'url':
       return src.url?.trim() || fallback;
     case 'blob':
       return modelApiUrl(src.key);
     default:
-      return toOptimizedModelPath(fallback, useOptimized);
+      return applyAssetVariant(fallback, options);
   }
 }
 
 export function heroWatchUrl(
   catalog: SiteCatalog,
   sceneOverride: string | null,
-  options?: { useOptimizedAssets?: boolean },
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean },
 ): string {
   if (sceneOverride?.trim()) return sceneOverride.trim();
   return resolveSource(
@@ -53,7 +72,7 @@ const AR_WATCH_DEFAULT = '/models/full_watch/watch_full_ar.glb';
 
 export function arWatchUrl(
   catalog: SiteCatalog,
-  options?: { useOptimizedAssets?: boolean },
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean },
 ): string {
   return resolveSource(catalog.arWatch, AR_WATCH_DEFAULT, options);
 }
@@ -65,7 +84,7 @@ export function getArUsdzPath(glbPath: string): string {
 
 export function dragonModelUrl(
   dragon: DragonVariant,
-  options?: { useOptimizedAssets?: boolean },
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean },
 ): string {
   return resolveSource(dragon.model, dragon.builtinPath, options);
 }
@@ -74,7 +93,7 @@ export function metalPartUrl(
   catalog: SiteCatalog,
   metal: MetalId,
   part: 'caseBody' | 'case' | 'movement',
-  options?: { useOptimizedAssets?: boolean; consolidatedMetals?: boolean },
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean; consolidatedMetals?: boolean },
 ): string {
   if (options?.consolidatedMetals) {
     const bases: Record<typeof part, string> = {
@@ -97,7 +116,7 @@ export function staticPartUrl(
   catalog: SiteCatalog,
   part: 'dial' | 'hand' | 'strap',
   fallback: string,
-  options?: { useOptimizedAssets?: boolean },
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean },
 ): string {
   return resolveSource(catalog.staticParts[part], fallback, options);
 }
@@ -105,7 +124,7 @@ export function staticPartUrl(
 export function globePartUrl(
   catalog: SiteCatalog,
   metal: MetalId,
-  options?: { useOptimizedAssets?: boolean; consolidatedMetals?: boolean },
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean; consolidatedMetals?: boolean },
 ): string {
   if (options?.consolidatedMetals) {
     return resolveSource(undefined, '/models/parts/globe_base.glb', options);

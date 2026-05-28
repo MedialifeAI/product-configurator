@@ -90,6 +90,13 @@ export interface SiteFeatures {
 export interface SiteFeatureFlags {
   /** Serve GLBs from /models-optimized (run `npm run build:assets` first). */
   useOptimizedAssets?: boolean;
+  /**
+   * Serve decimated GLBs from /models-ios (run `node scripts/build-ios-assets.mjs`).
+   * Not a config-driven flag — this is synthesized at runtime by renderQuality
+   * based on isIosDevice() or the ?ios=1 simulator override. Listed here so
+   * helper functions can carry it through type-safe options bags.
+   */
+  useIosAssets?: boolean;
   /** One geometry + PBR tint per metal part (requires identical source meshes). */
   consolidatedMetals?: boolean;
 }

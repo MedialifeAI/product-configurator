@@ -1,12 +1,19 @@
 import type { ModelQuality } from '@/context/SceneSettings';
 import type { DeviceTier } from '@/lib/deviceTier';
 import { isIosDevice } from '@/lib/ar';
+import { shouldUseIosAssets } from '@/lib/iosSimulation';
 
 export interface RenderQualitySettings {
   dpr: [number, number];
   antialias: boolean;
   /** When true, prefer /models-optimized paths. */
   useOptimizedAssets: boolean;
+  /**
+   * When true, load /models-ios paths (decimated meshes, ~10% triangle count).
+   * Set automatically for real iOS devices and the ?ios=1 simulator override.
+   * Takes precedence over useOptimizedAssets.
+   */
+  useIosAssets: boolean;
 }
 
 export function resolveWebGlPowerPreference(tier: DeviceTier): WebGLPowerPreference {
@@ -36,6 +43,7 @@ export function resolveRenderQuality(
 ): RenderQualitySettings {
   const effective = quality === 'auto' ? tierToQuality(tier) : quality;
   const useOptimizedAssets = resolveOptimizedAssets(globalOptimized, effective);
+  const useIosAssets = shouldUseIosAssets();
 
   switch (effective) {
     case 'low':
@@ -44,18 +52,21 @@ export function resolveRenderQuality(
         dpr: [1, 1.5],
         antialias: true,
         useOptimizedAssets,
+        useIosAssets,
       };
     case 'medium':
       return {
         dpr: [1, 1.5],
         antialias: false,
         useOptimizedAssets,
+        useIosAssets,
       };
     case 'high':
       return {
         dpr: [1, 2],
         antialias: true,
         useOptimizedAssets,
+        useIosAssets,
       };
     default:
       return resolveRenderQuality('auto', tier, globalOptimized);

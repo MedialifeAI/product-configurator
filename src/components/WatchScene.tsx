@@ -16,6 +16,7 @@ import { useMinViewport } from '@/hooks/useCompactViewport';
 import { getDeviceTier } from '@/lib/deviceTier';
 import { resolveRenderQuality, resolveWebGlPowerPreference } from '@/lib/renderQuality';
 import { heroWatchUrl } from '@/lib/resolveModelUrl';
+import type { IosHeroVariant } from '@/lib/assetRouting';
 import { softenPbrMaterials } from '@/lib/softenPbrMaterials';
 import { DEFAULT_CATALOG, type SiteCatalog, type SiteFeatureFlags } from '@/lib/siteConfigTypes';
 import { PerformanceOverlayPanel, PerformanceSampler } from '@/components/PerformanceOverlay';
@@ -28,6 +29,7 @@ interface WatchProps {
   catalog: SiteCatalog;
   useOptimizedAssets?: boolean;
   useIosAssets?: boolean;
+  iosVariant?: IosHeroVariant;
   scaleBoost?: number;
   onReady?: () => void;
 }
@@ -38,11 +40,12 @@ function Watch({
   catalog,
   useOptimizedAssets,
   useIosAssets,
+  iosVariant,
   scaleBoost = 1,
   onReady,
 }: WatchProps) {
   const group = useRef<THREE.Group>(null);
-  const url = heroWatchUrl(catalog, settings.heroModelUrl, { useOptimizedAssets, useIosAssets });
+  const url = heroWatchUrl(catalog, settings.heroModelUrl, { useOptimizedAssets, useIosAssets, iosVariant });
   const gltf = useGLTF(url) as any;
   const { actions, mixer } = useAnimations(gltf.animations, group);
 
@@ -192,6 +195,18 @@ export default function WatchScene({
     tier,
     effectiveFlags,
   );
+
+  // URL param ?hero-variant=mh|xh|ios overrides admin config (dev/QA use).
+  // Falls back to the variant resolved from featureFlags → admin config.
+  const iosVariant = useMemo<IosHeroVariant>(() => {
+    if (typeof window !== 'undefined') {
+      const v = new URLSearchParams(window.location.search).get('hero-variant');
+      if (v === 'ios-mh' || v === 'mh') return 'ios-mh';
+      if (v === 'ios-xh' || v === 'xh') return 'ios-xh';
+      if (v === 'ios') return 'ios';
+    }
+    return quality.iosVariant;
+  }, [quality.iosVariant]);
   const isLowTier = tier === 'low';
   const [contextLost, setContextLost] = useState(false);
   const [canvasEpoch, setCanvasEpoch] = useState(0);
@@ -239,7 +254,8 @@ export default function WatchScene({
             settings={settings}
             catalog={cat}
             useOptimizedAssets={quality.useOptimizedAssets}
-            useIosAssets={quality.useIosAssets}
+            useIosAssets={quality.useIosAssets || iosVariant !== quality.iosVariant}
+            iosVariant={iosVariant}
             scaleBoost={isDesktop ? 1.14 : 1}
             onReady={onReady}
           />

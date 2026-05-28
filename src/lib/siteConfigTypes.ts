@@ -91,9 +91,14 @@ export interface SiteFeatures {
  * Which GLB variant to load. See assetRouting.ts for the resolution algorithm.
  * - 'original'  → /models/         (full quality, ~37M triangles total)
  * - 'optimized' → /models-optimized/ (Meshopt-encoded; smaller files, same VRAM after decode)
- * - 'ios'       → /models-ios/     (decimated ~10% triangle count, iOS-safe)
+ * - 'ios'       → /models-ios/     (decimated ~10% tri count; crash-safe on all iPhones)
+ * - 'ios-mh'    → /models-ios-mh/  (medium-high ~2.2M tri; hero watch only, iPhone 13+)
+ * - 'ios-xh'    → /models-ios-xh/  (extra-high ~3.5M tri; hero watch only, iPhone 15 Pro+)
+ *
+ * Note: ios-mh / ios-xh only exist for full_watch/watch_full_default.glb.
+ * All other models fall back to /models-ios/ automatically.
  */
-export type AssetVariant = 'original' | 'optimized' | 'ios';
+export type AssetVariant = 'original' | 'optimized' | 'ios' | 'ios-mh' | 'ios-xh';
 
 export interface AssetVariantByPlatform {
   desktop?: AssetVariant;

@@ -1,4 +1,5 @@
 import { modelApiUrl } from '@/lib/modelBlobs';
+import type { IosHeroVariant } from '@/lib/assetRouting';
 import type {
   ComponentId,
   DragonVariant,
@@ -8,9 +9,16 @@ import type {
 } from '@/lib/siteConfigTypes';
 import { builtinPartIconPath } from './siteConfigTypes';
 
+export type { IosHeroVariant };
+
 const MODELS_ROOT = '/models';
 const OPTIMIZED_ROOT = '/models-optimized';
 const IOS_ROOT = '/models-ios';
+/** Medium-high quality iOS variant (~2.2M tris). For comparison via ?hero-variant=mh. */
+const IOS_MH_ROOT = '/models-ios-mh';
+/** Extra-high quality iOS variant (~3.5M tris). For comparison via ?hero-variant=xh. */
+const IOS_XH_ROOT = '/models-ios-xh';
+
 
 /** Rewrite a builtin /models/… path to /models-optimized/… when enabled. */
 export function toOptimizedModelPath(path: string, useOptimized = false): string {
@@ -28,11 +36,30 @@ export function toIosModelPath(path: string, useIos = false): string {
   return `${IOS_ROOT}${path.slice(MODELS_ROOT.length)}`;
 }
 
+/**
+ * Rewrite a builtin /models/… path to one of the iOS quality-tier roots.
+ * Used when ?hero-variant=mh|xh is set for dev/QA comparisons.
+ */
+export function toIosVariantPath(path: string, variant: IosHeroVariant): string {
+  if (!path.startsWith(`${MODELS_ROOT}/`)) return path;
+  const root = variant === 'ios-xh' ? IOS_XH_ROOT : variant === 'ios-mh' ? IOS_MH_ROOT : IOS_ROOT;
+  return `${root}${path.slice(MODELS_ROOT.length)}`;
+}
+
 function applyAssetVariant(
   path: string,
-  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean },
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean; iosVariant?: IosHeroVariant },
 ): string {
-  if (options?.useIosAssets) return toIosModelPath(path, true);
+  if (options?.useIosAssets) {
+    const variant = options.iosVariant;
+    // MH / XH variants only exist for full_watch models — fall back to the
+    // standard ios root for all other paths (parts, dragons, movements, etc.).
+    if (variant === 'ios-mh' || variant === 'ios-xh') {
+      if (path.includes('/full_watch/')) return toIosVariantPath(path, variant);
+      return toIosModelPath(path, true);
+    }
+    return toIosModelPath(path, true);
+  }
   if (options?.useOptimizedAssets) return toOptimizedModelPath(path, true);
   return path;
 }
@@ -40,7 +67,7 @@ function applyAssetVariant(
 export function resolveSource(
   src: ModelSource | undefined,
   fallback: string,
-  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean },
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean; iosVariant?: IosHeroVariant },
 ): string {
   if (!src) return applyAssetVariant(fallback, options);
   switch (src.type) {
@@ -58,7 +85,7 @@ export function resolveSource(
 export function heroWatchUrl(
   catalog: SiteCatalog,
   sceneOverride: string | null,
-  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean },
+  options?: { useIosAssets?: boolean; useOptimizedAssets?: boolean; iosVariant?: IosHeroVariant },
 ): string {
   if (sceneOverride?.trim()) return sceneOverride.trim();
   return resolveSource(

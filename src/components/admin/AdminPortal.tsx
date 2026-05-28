@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { detectPlatform, resolveAssetVariant } from '@/lib/assetRouting';
 import type { SceneSettings } from '@/context/SceneSettings';
 import {
   adminHeaders,
@@ -367,21 +368,16 @@ function AssetVariantCard({
       },
     }));
 
-  const [resolved, setResolved] = useState<{ platform: string; variant: string } | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const mod = await import('@/lib/assetRouting');
-      if (cancelled) return;
-      setResolved({
-        platform: mod.detectPlatform(),
-        variant: mod.resolveAssetVariant(ff.assetVariantByPlatform),
-      });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [ff.assetVariantByPlatform]);
+  // Static import lets us resolve synchronously on first render so the panel
+  // never shows a "Detecting…" placeholder. Both functions are safe to call
+  // during SSR (each guards against `typeof window === 'undefined'`).
+  const resolved = useMemo(
+    () => ({
+      platform: detectPlatform(),
+      variant: resolveAssetVariant(ff.assetVariantByPlatform),
+    }),
+    [ff.assetVariantByPlatform],
+  );
 
   return (
     <Card title="3D asset variant per platform">
@@ -410,16 +406,10 @@ function AssetVariantCard({
         <div className="font-mono text-[10px] uppercase tracking-wider text-bone/40 mb-1">
           This browser
         </div>
-        {resolved ? (
-          <>
-            Detected platform: <strong className="text-bone">{resolved.platform}</strong>
-            <br />
-            Loading variant:{' '}
-            <strong className="text-jc-gold/90">{resolved.variant}</strong>
-          </>
-        ) : (
-          <>Detecting…</>
-        )}
+        Detected platform: <strong className="text-bone">{resolved.platform}</strong>
+        <br />
+        Loading variant:{' '}
+        <strong className="text-jc-gold/90">{resolved.variant}</strong>
         <div className="mt-2 text-[10px] text-bone/40">
           QA overrides via URL on the live site:
           <br />
@@ -987,6 +977,10 @@ function ModelSourceEditor({
 
   // Drag-and-drop handlers. dragDepth ref counts nested enters so leaving a
   // child element doesn't clear the highlight prematurely.
+  const resetDrag = () => {
+    dragDepth.current = 0;
+    setDragOver(false);
+  };
   const onDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     dragDepth.current += 1;
@@ -996,17 +990,37 @@ function ModelSourceEditor({
     e.preventDefault();
     if (e.dataTransfer.types.includes('Files')) e.dataTransfer.dropEffect = 'copy';
   };
-  const onDragLeave = () => {
+  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    // relatedTarget === null when the drag exits the browser window — in that
+    // case dragenter/dragleave can't reconcile, so force the counter to zero
+    // instead of decrementing (which would leave the highlight stuck on).
+    if (e.relatedTarget === null) {
+      resetDrag();
+      return;
+    }
     dragDepth.current = Math.max(0, dragDepth.current - 1);
     if (dragDepth.current === 0) setDragOver(false);
   };
   const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-    dragDepth.current = 0;
-    setDragOver(false);
+    resetDrag();
     const file = e.dataTransfer.files?.[0];
     if (file) void upload(file);
   };
+
+  // Global safety net — drag operations that end outside any registered
+  // dropzone (Esc, dropped onto a non-target, focus loss) reliably zero the
+  // counter even when dragleave never fires.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onWindowEnd = () => resetDrag();
+    window.addEventListener('dragend', onWindowEnd);
+    window.addEventListener('drop', onWindowEnd);
+    return () => {
+      window.removeEventListener('dragend', onWindowEnd);
+      window.removeEventListener('drop', onWindowEnd);
+    };
+  }, []);
 
   return (
     <div className="mb-4 last:mb-0">
@@ -1063,7 +1077,10 @@ function ModelSourceEditor({
             <input
               type="file"
               accept={acceptAttr}
-              className="sr-only"
+              // pointer-events-none guarantees the clipped input never
+              // intercepts drag events; the wrapping <label> still routes
+              // clicks correctly via the label-input association.
+              className="sr-only pointer-events-none"
               disabled={uploading}
               onChange={e => {
                 const f = e.target.files?.[0];

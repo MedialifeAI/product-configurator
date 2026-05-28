@@ -311,32 +311,160 @@ function FeaturesTab({
   setConfig: (fn: (p: SiteConfig) => SiteConfig) => void;
 }) {
   return (
-    <Card title="Site features">
-      <Toggle
-        label="Show floating scene-controls on the public homepage"
-        checked={config.features.showSceneControls}
-        onChange={v =>
-          setConfig(p => ({ ...p, features: { ...p.features, showSceneControls: v } }))
-        }
-      />
-      <Toggle
-        label="Show View in AR button in the configurator"
-        checked={config.features.showArButton}
-        onChange={v =>
-          setConfig(p => ({ ...p, features: { ...p.features, showArButton: v } }))
-        }
-      />
-      <Toggle
-        label="Show FPS / draw-call overlay on 3D canvases"
-        checked={config.features.showPerformanceOverlay}
-        onChange={v =>
-          setConfig(p => ({ ...p, features: { ...p.features, showPerformanceOverlay: v } }))
-        }
-      />
-      <p className="text-[11px] text-bone/40 mt-3">
-        Scene controls expose the legacy gear for rapid on-site tweaks. Most changes should be made here in admin.
+    <div className="space-y-6">
+      <Card title="Site features">
+        <Toggle
+          label="Show floating scene-controls on the public homepage"
+          checked={config.features.showSceneControls}
+          onChange={v =>
+            setConfig(p => ({ ...p, features: { ...p.features, showSceneControls: v } }))
+          }
+        />
+        <Toggle
+          label="Show View in AR button in the configurator"
+          checked={config.features.showArButton}
+          onChange={v =>
+            setConfig(p => ({ ...p, features: { ...p.features, showArButton: v } }))
+          }
+        />
+        <Toggle
+          label="Show FPS / draw-call overlay on 3D canvases"
+          checked={config.features.showPerformanceOverlay}
+          onChange={v =>
+            setConfig(p => ({ ...p, features: { ...p.features, showPerformanceOverlay: v } }))
+          }
+        />
+        <p className="text-[11px] text-bone/40 mt-3">
+          Scene controls expose the legacy gear for rapid on-site tweaks. Most changes should be made here in admin.
+        </p>
+      </Card>
+      <AssetVariantCard config={config} setConfig={setConfig} />
+    </div>
+  );
+}
+
+function AssetVariantCard({
+  config,
+  setConfig,
+}: {
+  config: SiteConfig;
+  setConfig: (fn: (p: SiteConfig) => SiteConfig) => void;
+}) {
+  const ff = config.featureFlags ?? {};
+  const variants = ff.assetVariantByPlatform ?? {};
+  const setVariant = (
+    platform: 'desktop' | 'android' | 'ios',
+    value: 'original' | 'optimized' | 'ios',
+  ) =>
+    setConfig(p => ({
+      ...p,
+      featureFlags: {
+        ...p.featureFlags,
+        assetVariantByPlatform: {
+          ...(p.featureFlags?.assetVariantByPlatform ?? {}),
+          [platform]: value,
+        },
+      },
+    }));
+
+  const [resolved, setResolved] = useState<{ platform: string; variant: string } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const mod = await import('@/lib/assetRouting');
+      if (cancelled) return;
+      setResolved({
+        platform: mod.detectPlatform(),
+        variant: mod.resolveAssetVariant(ff.assetVariantByPlatform),
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ff.assetVariantByPlatform]);
+
+  return (
+    <Card title="3D asset variant per platform">
+      <p className="text-[11px] text-bone/50 mb-3 leading-relaxed">
+        Pick which GLB tier each platform loads. iOS Safari crashes above ~250–500&nbsp;MB
+        per-tab memory, so the decimated <code className="text-jc-gold/90">ios</code> tier
+        (≈10% triangle count) is the safe default there. Desktop and Android handle the
+        originals comfortably.
       </p>
+      <Select
+        label="Desktop"
+        value={variants.desktop ?? 'original'}
+        onChange={v => setVariant('desktop', v)}
+      />
+      <Select
+        label="Android"
+        value={variants.android ?? 'original'}
+        onChange={v => setVariant('android', v)}
+      />
+      <Select
+        label="iOS"
+        value={variants.ios ?? 'ios'}
+        onChange={v => setVariant('ios', v)}
+      />
+      <div className="mt-3 rounded-lg border border-bone/10 bg-ink/40 px-3 py-2 text-[11px] text-bone/65 leading-relaxed">
+        <div className="font-mono text-[10px] uppercase tracking-wider text-bone/40 mb-1">
+          This browser
+        </div>
+        {resolved ? (
+          <>
+            Detected platform: <strong className="text-bone">{resolved.platform}</strong>
+            <br />
+            Loading variant:{' '}
+            <strong className="text-jc-gold/90">{resolved.variant}</strong>
+          </>
+        ) : (
+          <>Detecting…</>
+        )}
+        <div className="mt-2 text-[10px] text-bone/40">
+          QA overrides via URL on the live site:
+          <br />
+          <code className="text-jc-gold/70">?platform=ios|android|desktop</code> &nbsp;·&nbsp;
+          <code className="text-jc-gold/70">?variant=original|optimized|ios</code>
+        </div>
+      </div>
     </Card>
+  );
+}
+
+const ASSET_VARIANT_OPTIONS: { value: 'original' | 'optimized' | 'ios'; label: string; hint: string }[] = [
+  { value: 'original',  label: 'Original',         hint: '/models — full quality, ~37M tri total' },
+  { value: 'optimized', label: 'Optimized',        hint: '/models-optimized — partial set, run build:assets to fill in' },
+  { value: 'ios',       label: 'iOS (decimated)',  hint: '/models-ios — ~10% tri count; iOS-safe' },
+];
+
+function Select({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: 'original' | 'optimized' | 'ios';
+  onChange: (v: 'original' | 'optimized' | 'ios') => void;
+}) {
+  const active = ASSET_VARIANT_OPTIONS.find(o => o.value === value) ?? ASSET_VARIANT_OPTIONS[0];
+  return (
+    <div className="mb-3">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <label className="text-[10px] uppercase tracking-wider text-bone/50">{label}</label>
+        <span className="text-[10px] text-bone/35 font-mono">{active.hint}</span>
+      </div>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value as 'original' | 'optimized' | 'ios')}
+        className="w-full rounded-lg bg-ink/50 border border-bone/10 px-3 py-2 text-sm text-bone focus:border-jc-gold/60 focus:outline-none"
+      >
+        {ASSET_VARIANT_OPTIONS.map(o => (
+          <option key={o.value} value={o.value} className="bg-ink">
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 

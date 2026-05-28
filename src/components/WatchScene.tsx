@@ -17,7 +17,7 @@ import { getDeviceTier } from '@/lib/deviceTier';
 import { resolveRenderQuality, resolveWebGlPowerPreference } from '@/lib/renderQuality';
 import { heroWatchUrl } from '@/lib/resolveModelUrl';
 import { softenPbrMaterials } from '@/lib/softenPbrMaterials';
-import { DEFAULT_CATALOG, type SiteCatalog } from '@/lib/siteConfigTypes';
+import { DEFAULT_CATALOG, type SiteCatalog, type SiteFeatureFlags } from '@/lib/siteConfigTypes';
 import { PerformanceOverlayPanel, PerformanceSampler } from '@/components/PerformanceOverlay';
 
 useGLTF.setDecoderPath?.('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
@@ -159,6 +159,13 @@ interface WatchSceneProps {
   settings?: SceneSettings;
   catalog?: SiteCatalog;
   heroMounted?: boolean;
+  /**
+   * Full featureFlags so per-platform variant routing reaches resolveRenderQuality.
+   * Falls back to a synthesized shape if the legacy `useOptimizedAssets` boolean
+   * is passed instead.
+   */
+  featureFlags?: SiteFeatureFlags;
+  /** @deprecated Pass `featureFlags` instead. Wrapped for backward compat. */
   useOptimizedAssets?: boolean;
   showPerformanceOverlay?: boolean;
   onReady?: () => void;
@@ -170,6 +177,7 @@ export default function WatchScene({
   settings = DEFAULT_SETTINGS,
   catalog,
   heroMounted = true,
+  featureFlags,
   useOptimizedAssets,
   showPerformanceOverlay = false,
   onReady,
@@ -178,10 +186,11 @@ export default function WatchScene({
   const tier = useMemo(() => getDeviceTier(), []);
   const isDesktop = useMinViewport(1024);
   const perfSourceId = useId();
+  const effectiveFlags: SiteFeatureFlags = featureFlags ?? { useOptimizedAssets };
   const quality = resolveRenderQuality(
     settings.heroModelQuality ?? 'auto',
     tier,
-    useOptimizedAssets,
+    effectiveFlags,
   );
   const isLowTier = tier === 'low';
   const [contextLost, setContextLost] = useState(false);

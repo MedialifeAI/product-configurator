@@ -46,9 +46,9 @@ function HomeContent() {
       resolveRenderQuality(
         settings.heroModelQuality ?? 'auto',
         tier,
-        config.featureFlags?.useOptimizedAssets,
+        config.featureFlags,
       ),
-    [settings.heroModelQuality, tier, config.featureFlags?.useOptimizedAssets],
+    [settings.heroModelQuality, tier, config.featureFlags],
   );
   const heroModelUrl = heroWatchUrl(config.catalog, settings.heroModelUrl, {
     useOptimizedAssets: heroRenderQuality.useOptimizedAssets,
@@ -99,7 +99,7 @@ function HomeContent() {
               settings={settings}
               catalog={config.catalog}
               heroMounted={!configuratorInView && !arSessionOpen}
-              useOptimizedAssets={config.featureFlags?.useOptimizedAssets}
+              featureFlags={config.featureFlags}
               showPerformanceOverlay={config.features.showPerformanceOverlay}
               onReady={() => setSceneReady(true)}
             />

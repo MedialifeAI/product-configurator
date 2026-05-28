@@ -87,14 +87,36 @@ export interface SiteFeatures {
   showPerformanceOverlay: boolean;
 }
 
+/**
+ * Which GLB variant to load. See assetRouting.ts for the resolution algorithm.
+ * - 'original'  → /models/         (full quality, ~37M triangles total)
+ * - 'optimized' → /models-optimized/ (Meshopt-encoded; smaller files, same VRAM after decode)
+ * - 'ios'       → /models-ios/     (decimated ~10% triangle count, iOS-safe)
+ */
+export type AssetVariant = 'original' | 'optimized' | 'ios';
+
+export interface AssetVariantByPlatform {
+  desktop?: AssetVariant;
+  android?: AssetVariant;
+  ios?: AssetVariant;
+}
+
 export interface SiteFeatureFlags {
-  /** Serve GLBs from /models-optimized (run `npm run build:assets` first). */
+  /**
+   * Per-platform variant routing. Admin-controlled. When set for a platform,
+   * overrides the hard defaults (desktop/android → original, ios → ios).
+   */
+  assetVariantByPlatform?: AssetVariantByPlatform;
+  /**
+   * Legacy boolean — when assetVariantByPlatform is absent, true forces every
+   * platform to load /models-optimized. Kept for backward compatibility with
+   * older configs; new work should use assetVariantByPlatform.
+   */
   useOptimizedAssets?: boolean;
   /**
-   * Serve decimated GLBs from /models-ios (run `node scripts/build-ios-assets.mjs`).
-   * Not a config-driven flag — this is synthesized at runtime by renderQuality
-   * based on isIosDevice() or the ?ios=1 simulator override. Listed here so
-   * helper functions can carry it through type-safe options bags.
+   * Runtime-only pass-through — true when the current session has resolved to
+   * the 'ios' variant. Helper functions carry it through type-safe option bags.
+   * Never persisted in config; populated from resolveAssetVariant().
    */
   useIosAssets?: boolean;
   /** One geometry + PBR tint per metal part (requires identical source meshes). */
@@ -461,6 +483,11 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   featureFlags: {
     useOptimizedAssets: false,
     consolidatedMetals: false,
+    assetVariantByPlatform: {
+      desktop: 'original',
+      android: 'original',
+      ios: 'ios',
+    },
   },
   materialOverrides: {
     metal: DEFAULT_METAL_OVERRIDES,

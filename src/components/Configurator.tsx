@@ -385,9 +385,9 @@ export default function Configurator({
       resolveRenderQuality(
         settings.configModelQuality ?? 'auto',
         tier,
-        config.featureFlags?.useOptimizedAssets,
+        config.featureFlags,
       ),
-    [settings.configModelQuality, tier, config.featureFlags?.useOptimizedAssets],
+    [settings.configModelQuality, tier, config.featureFlags],
   );
   const perfSourceId = useId();
   const showPerf = features.showPerformanceOverlay;

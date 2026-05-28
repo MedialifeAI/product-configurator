@@ -81,7 +81,7 @@ function HeroPreview() {
           scrollProgress={scrollProgress}
           settings={config.scene}
           catalog={config.catalog}
-          useOptimizedAssets={config.featureFlags?.useOptimizedAssets}
+          featureFlags={config.featureFlags}
           showPerformanceOverlay={config.features.showPerformanceOverlay}
           className="w-full h-full"
         />

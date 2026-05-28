@@ -4,6 +4,7 @@ import dynamic from 'next/dynamic';
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import HeroCollectionPanel from '@/components/HeroCollectionPanel';
 import HeroSceneLoader from '@/components/HeroSceneLoader';
+import HeroSideFacts from '@/components/HeroSideFacts';
 import SiteHeader from '@/components/SiteHeader';
 import StoryPanel from '@/components/StoryPanel';
 import SpecsAndCTA from '@/components/SpecsAndCTA';
@@ -45,12 +46,13 @@ function HomeContent() {
       resolveRenderQuality(
         settings.heroModelQuality ?? 'auto',
         tier,
-        config.featureFlags?.useOptimizedAssets,
+        config.featureFlags,
       ),
-    [settings.heroModelQuality, tier, config.featureFlags?.useOptimizedAssets],
+    [settings.heroModelQuality, tier, config.featureFlags],
   );
   const heroModelUrl = heroWatchUrl(config.catalog, settings.heroModelUrl, {
     useOptimizedAssets: heroRenderQuality.useOptimizedAssets,
+    useIosAssets: heroRenderQuality.useIosAssets,
   });
   const { progress: heroProgress, done: heroAssetDone } = useAssetLoadProgress(heroModelUrl);
   const [sceneReady, setSceneReady] = useState(false);
@@ -97,7 +99,7 @@ function HomeContent() {
               settings={settings}
               catalog={config.catalog}
               heroMounted={!configuratorInView && !arSessionOpen}
-              useOptimizedAssets={config.featureFlags?.useOptimizedAssets}
+              featureFlags={config.featureFlags}
               showPerformanceOverlay={config.features.showPerformanceOverlay}
               onReady={() => setSceneReady(true)}
             />
@@ -105,15 +107,18 @@ function HomeContent() {
         </div>
 
         <div className="relative -mt-screen">
-          <section className="relative h-screen w-full flex flex-col items-center justify-between px-3 sm:px-5 pt-[max(6.75rem,12vh)] md:pt-[max(6.5rem,11vh)] pb-[max(1.25rem,3vh)] md:pb-[max(2rem,5vh)] z-10 pointer-events-none">
-            <div className="text-center max-w-3xl mx-auto w-full shrink-0 overflow-visible -translate-y-[6vh] sm:-translate-y-[2vh] md:-translate-y-[4vh] lg:-translate-y-[6vh] px-2 pt-1 sm:pt-0">
+          <section className="relative h-screen w-full flex flex-col items-center justify-between px-3 sm:px-5 pt-[max(6.75rem,12vh)] md:pt-[max(6.5rem,11vh)] pb-[max(1.25rem,3vh)] md:pb-[max(0.75rem,1.5vh)] z-10 pointer-events-none">
+            <HeroSideFacts rows={content.specs.rows} />
+
+            <div className="text-center max-w-5xl mx-auto w-full shrink-0 overflow-visible -translate-y-[6vh] sm:-translate-y-[2vh] md:-translate-y-[3vh] lg:-translate-y-[4vh] xl:-translate-y-[5vh] px-2 pt-1 sm:pt-0">
               <h1
-                className="font-display text-6xl md:text-8xl lg:text-9xl leading-[1.08] md:leading-[1.06] overflow-visible animate-fade-up"
+                className="font-display text-6xl md:text-7xl lg:text-8xl xl:text-[5.75rem] leading-[1.08] md:leading-[1.02] md:whitespace-nowrap overflow-visible animate-fade-up"
                 style={{ textShadow: '0 2px 28px rgba(0,0,0,0.92), 0 0 48px rgba(0,0,0,0.75)' }}
               >
-                <span className="block text-bone">{content.hero.titleLine1}</span>
+                <span className="block md:inline text-bone">{content.hero.titleLine1}</span>
+                <span className="hidden md:inline">&nbsp;</span>
                 <span
-                  className="block gold-text hero-title-accent"
+                  className="block md:inline gold-text hero-title-accent"
                   style={{ filter: 'drop-shadow(0 2px 20px rgba(0,0,0,0.85))' }}
                 >
                   {content.hero.titleLine2}
@@ -121,7 +126,7 @@ function HomeContent() {
               </h1>
             </div>
 
-            <div className="w-full max-w-none sm:max-w-[40rem] md:max-w-[44rem] mx-auto mb-[2vh] md:mb-[4vh] px-1 sm:px-3">
+            <div className="w-full max-w-none sm:max-w-[40rem] md:max-w-[44rem] mx-auto mb-[2vh] md:mb-[0.75vh] px-1 sm:px-3">
               <HeroCollectionPanel>
                 <p className="text-[10px] sm:text-xs tracking-[0.3em] uppercase text-jc-gold/90 mb-2 sm:mb-2.5">
                   {content.hero.eyebrow}

@@ -9,12 +9,14 @@ import {
 export type CatalogUrlOptions = {
   globeMetal?: MetalId;
   useOptimizedAssets?: boolean;
+  useIosAssets?: boolean;
   consolidatedMetals?: boolean;
 };
 
 function catalogOptions(config?: Pick<SiteConfig, 'featureFlags'>): CatalogUrlOptions {
   return {
     useOptimizedAssets: config?.featureFlags?.useOptimizedAssets ?? false,
+    useIosAssets: config?.featureFlags?.useIosAssets ?? false,
     consolidatedMetals: config?.featureFlags?.consolidatedMetals ?? false,
   };
 }
@@ -45,6 +47,7 @@ export function getConfiguratorPartUrls(
   const globeMetal = options?.globeMetal ?? metal;
   const urlOpts = {
     useOptimizedAssets: options?.useOptimizedAssets,
+    useIosAssets: options?.useIosAssets,
     consolidatedMetals: options?.consolidatedMetals,
   };
   return {

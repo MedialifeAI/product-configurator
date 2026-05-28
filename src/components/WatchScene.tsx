@@ -12,11 +12,12 @@ import type { SceneSettings } from '@/context/SceneSettings';
 import { DEFAULT_SETTINGS } from '@/context/SceneSettings';
 import { WebGlContextBanner } from '@/components/WebGlContextBanner';
 import { WebGlContextListener } from '@/components/WebGlContextListener';
+import { useMinViewport } from '@/hooks/useCompactViewport';
 import { getDeviceTier } from '@/lib/deviceTier';
-import { resolveRenderQuality } from '@/lib/renderQuality';
+import { resolveRenderQuality, resolveWebGlPowerPreference } from '@/lib/renderQuality';
 import { heroWatchUrl } from '@/lib/resolveModelUrl';
 import { softenPbrMaterials } from '@/lib/softenPbrMaterials';
-import { DEFAULT_CATALOG, type SiteCatalog } from '@/lib/siteConfigTypes';
+import { DEFAULT_CATALOG, type SiteCatalog, type SiteFeatureFlags } from '@/lib/siteConfigTypes';
 import { PerformanceOverlayPanel, PerformanceSampler } from '@/components/PerformanceOverlay';
 
 useGLTF.setDecoderPath?.('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
@@ -26,12 +27,22 @@ interface WatchProps {
   settings: SceneSettings;
   catalog: SiteCatalog;
   useOptimizedAssets?: boolean;
+  useIosAssets?: boolean;
+  scaleBoost?: number;
   onReady?: () => void;
 }
 
-function Watch({ scrollProgress, settings, catalog, useOptimizedAssets, onReady }: WatchProps) {
+function Watch({
+  scrollProgress,
+  settings,
+  catalog,
+  useOptimizedAssets,
+  useIosAssets,
+  scaleBoost = 1,
+  onReady,
+}: WatchProps) {
   const group = useRef<THREE.Group>(null);
-  const url = heroWatchUrl(catalog, settings.heroModelUrl, { useOptimizedAssets });
+  const url = heroWatchUrl(catalog, settings.heroModelUrl, { useOptimizedAssets, useIosAssets });
   const gltf = useGLTF(url) as any;
   const { actions, mixer } = useAnimations(gltf.animations, group);
 
@@ -106,7 +117,7 @@ function Watch({ scrollProgress, settings, catalog, useOptimizedAssets, onReady 
     }
   });
 
-  const finalScale = fit.scale * settings.heroScale;
+  const finalScale = fit.scale * settings.heroScale * scaleBoost;
   return (
     <group ref={group} position={[0, settings.heroY, 0]}>
       <group
@@ -148,6 +159,13 @@ interface WatchSceneProps {
   settings?: SceneSettings;
   catalog?: SiteCatalog;
   heroMounted?: boolean;
+  /**
+   * Full featureFlags so per-platform variant routing reaches resolveRenderQuality.
+   * Falls back to a synthesized shape if the legacy `useOptimizedAssets` boolean
+   * is passed instead.
+   */
+  featureFlags?: SiteFeatureFlags;
+  /** @deprecated Pass `featureFlags` instead. Wrapped for backward compat. */
   useOptimizedAssets?: boolean;
   showPerformanceOverlay?: boolean;
   onReady?: () => void;
@@ -159,17 +177,20 @@ export default function WatchScene({
   settings = DEFAULT_SETTINGS,
   catalog,
   heroMounted = true,
+  featureFlags,
   useOptimizedAssets,
   showPerformanceOverlay = false,
   onReady,
 }: WatchSceneProps) {
   const cat = catalog ?? DEFAULT_CATALOG;
   const tier = useMemo(() => getDeviceTier(), []);
+  const isDesktop = useMinViewport(1024);
   const perfSourceId = useId();
+  const effectiveFlags: SiteFeatureFlags = featureFlags ?? { useOptimizedAssets };
   const quality = resolveRenderQuality(
     settings.heroModelQuality ?? 'auto',
     tier,
-    useOptimizedAssets,
+    effectiveFlags,
   );
   const isLowTier = tier === 'low';
   const [contextLost, setContextLost] = useState(false);
@@ -190,12 +211,12 @@ export default function WatchScene({
       {!contextLost && (
         <Canvas
           key={canvasEpoch}
-          camera={{ position: [0, 0.4, 4.2], fov: 32, near: 0.1, far: 100 }}
+          camera={{ position: [0, 0.4, isDesktop ? 3.95 : 4.2], fov: 32, near: 0.1, far: 100 }}
           dpr={quality.dpr}
           gl={{
             antialias: quality.antialias,
             alpha: true,
-            powerPreference: isLowTier ? 'low-power' : 'high-performance',
+            powerPreference: resolveWebGlPowerPreference(tier),
           }}
           style={{ background: 'transparent' }}
         >
@@ -203,12 +224,23 @@ export default function WatchScene({
           <PerformanceSampler enabled={showPerformanceOverlay} sourceId={perfSourceId} />
           <ToneExposure value={settings.heroExposure} />
           <SceneLights settings={settings} />
-          <Environment preset="studio" environmentIntensity={settings.heroEnv} />
+          {/*
+            HDR environment runs at a tiny resolution on iOS (cubemap drops from
+            ~24MB to ~100KB GPU) so metallic surfaces still pick up reflections.
+            Other platforms keep the full studio environment.
+          */}
+          <Environment
+            preset="studio"
+            environmentIntensity={settings.heroEnv}
+            resolution={quality.useIosAssets ? 64 : 256}
+          />
           <Watch
             scrollProgress={scrollProgress}
             settings={settings}
             catalog={cat}
             useOptimizedAssets={quality.useOptimizedAssets}
+            useIosAssets={quality.useIosAssets}
+            scaleBoost={isDesktop ? 1.14 : 1}
             onReady={onReady}
           />
           {!isLowTier && (

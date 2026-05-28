@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
+import { detectPlatform, resolveAssetVariant } from '@/lib/assetRouting';
 import type { SceneSettings } from '@/context/SceneSettings';
 import {
   adminHeaders,
@@ -311,32 +312,149 @@ function FeaturesTab({
   setConfig: (fn: (p: SiteConfig) => SiteConfig) => void;
 }) {
   return (
-    <Card title="Site features">
-      <Toggle
-        label="Show floating scene-controls on the public homepage"
-        checked={config.features.showSceneControls}
-        onChange={v =>
-          setConfig(p => ({ ...p, features: { ...p.features, showSceneControls: v } }))
-        }
-      />
-      <Toggle
-        label="Show View in AR button in the configurator"
-        checked={config.features.showArButton}
-        onChange={v =>
-          setConfig(p => ({ ...p, features: { ...p.features, showArButton: v } }))
-        }
-      />
-      <Toggle
-        label="Show FPS / draw-call overlay on 3D canvases"
-        checked={config.features.showPerformanceOverlay}
-        onChange={v =>
-          setConfig(p => ({ ...p, features: { ...p.features, showPerformanceOverlay: v } }))
-        }
-      />
-      <p className="text-[11px] text-bone/40 mt-3">
-        Scene controls expose the legacy gear for rapid on-site tweaks. Most changes should be made here in admin.
+    <div className="space-y-6">
+      <Card title="Site features">
+        <Toggle
+          label="Show floating scene-controls on the public homepage"
+          checked={config.features.showSceneControls}
+          onChange={v =>
+            setConfig(p => ({ ...p, features: { ...p.features, showSceneControls: v } }))
+          }
+        />
+        <Toggle
+          label="Show View in AR button in the configurator"
+          checked={config.features.showArButton}
+          onChange={v =>
+            setConfig(p => ({ ...p, features: { ...p.features, showArButton: v } }))
+          }
+        />
+        <Toggle
+          label="Show FPS / draw-call overlay on 3D canvases"
+          checked={config.features.showPerformanceOverlay}
+          onChange={v =>
+            setConfig(p => ({ ...p, features: { ...p.features, showPerformanceOverlay: v } }))
+          }
+        />
+        <p className="text-[11px] text-bone/40 mt-3">
+          Scene controls expose the legacy gear for rapid on-site tweaks. Most changes should be made here in admin.
+        </p>
+      </Card>
+      <AssetVariantCard config={config} setConfig={setConfig} />
+    </div>
+  );
+}
+
+function AssetVariantCard({
+  config,
+  setConfig,
+}: {
+  config: SiteConfig;
+  setConfig: (fn: (p: SiteConfig) => SiteConfig) => void;
+}) {
+  const ff = config.featureFlags ?? {};
+  const variants = ff.assetVariantByPlatform ?? {};
+  const setVariant = (
+    platform: 'desktop' | 'android' | 'ios',
+    value: 'original' | 'optimized' | 'ios',
+  ) =>
+    setConfig(p => ({
+      ...p,
+      featureFlags: {
+        ...p.featureFlags,
+        assetVariantByPlatform: {
+          ...(p.featureFlags?.assetVariantByPlatform ?? {}),
+          [platform]: value,
+        },
+      },
+    }));
+
+  // Static import lets us resolve synchronously on first render so the panel
+  // never shows a "Detecting…" placeholder. Both functions are safe to call
+  // during SSR (each guards against `typeof window === 'undefined'`).
+  const resolved = useMemo(
+    () => ({
+      platform: detectPlatform(),
+      variant: resolveAssetVariant(ff.assetVariantByPlatform),
+    }),
+    [ff.assetVariantByPlatform],
+  );
+
+  return (
+    <Card title="3D asset variant per platform">
+      <p className="text-[11px] text-bone/50 mb-3 leading-relaxed">
+        Pick which GLB tier each platform loads. iOS Safari crashes above ~250–500&nbsp;MB
+        per-tab memory, so the decimated <code className="text-jc-gold/90">ios</code> tier
+        (≈10% triangle count) is the safe default there. Desktop and Android handle the
+        originals comfortably.
       </p>
+      <Select
+        label="Desktop"
+        value={variants.desktop ?? 'original'}
+        onChange={v => setVariant('desktop', v)}
+      />
+      <Select
+        label="Android"
+        value={variants.android ?? 'original'}
+        onChange={v => setVariant('android', v)}
+      />
+      <Select
+        label="iOS"
+        value={variants.ios ?? 'ios'}
+        onChange={v => setVariant('ios', v)}
+      />
+      <div className="mt-3 rounded-lg border border-bone/10 bg-ink/40 px-3 py-2 text-[11px] text-bone/65 leading-relaxed">
+        <div className="font-mono text-[10px] uppercase tracking-wider text-bone/40 mb-1">
+          This browser
+        </div>
+        Detected platform: <strong className="text-bone">{resolved.platform}</strong>
+        <br />
+        Loading variant:{' '}
+        <strong className="text-jc-gold/90">{resolved.variant}</strong>
+        <div className="mt-2 text-[10px] text-bone/40">
+          QA overrides via URL on the live site:
+          <br />
+          <code className="text-jc-gold/70">?platform=ios|android|desktop</code> &nbsp;·&nbsp;
+          <code className="text-jc-gold/70">?variant=original|optimized|ios</code>
+        </div>
+      </div>
     </Card>
+  );
+}
+
+const ASSET_VARIANT_OPTIONS: { value: 'original' | 'optimized' | 'ios'; label: string; hint: string }[] = [
+  { value: 'original',  label: 'Original',         hint: '/models — full quality, ~37M tri total' },
+  { value: 'optimized', label: 'Optimized',        hint: '/models-optimized — partial set, run build:assets to fill in' },
+  { value: 'ios',       label: 'iOS (decimated)',  hint: '/models-ios — ~10% tri count; iOS-safe' },
+];
+
+function Select({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: 'original' | 'optimized' | 'ios';
+  onChange: (v: 'original' | 'optimized' | 'ios') => void;
+}) {
+  const active = ASSET_VARIANT_OPTIONS.find(o => o.value === value) ?? ASSET_VARIANT_OPTIONS[0];
+  return (
+    <div className="mb-3">
+      <div className="flex items-center justify-between gap-3 mb-1">
+        <label className="text-[10px] uppercase tracking-wider text-bone/50">{label}</label>
+        <span className="text-[10px] text-bone/35 font-mono">{active.hint}</span>
+      </div>
+      <select
+        value={value}
+        onChange={e => onChange(e.target.value as 'original' | 'optimized' | 'ios')}
+        className="w-full rounded-lg bg-ink/50 border border-bone/10 px-3 py-2 text-sm text-bone focus:border-jc-gold/60 focus:outline-none"
+      >
+        {ASSET_VARIANT_OPTIONS.map(o => (
+          <option key={o.value} value={o.value} className="bg-ink">
+            {o.label}
+          </option>
+        ))}
+      </select>
+    </div>
   );
 }
 
@@ -391,6 +509,28 @@ function ArTab({
         />
         <Slider label="Max presets (0 = all)" value={a.maxPresets} min={0} max={12} step={1} onChange={v => setAr('maxPresets', Math.round(v))} />
         <Field label="Tap-to-place hint" value={a.tapToPlaceHint} onChange={v => setAr('tapToPlaceHint', v)} multiline />
+      </Card>
+      <Card title="External AR link (override)">
+        <p className="text-[11px] text-bone/40 mb-3 leading-relaxed">
+          When enabled <strong>and</strong> a URL is set, the View in AR button opens that URL in
+          a new tab instead of launching the model-viewer / QR flow. Leave the toggle off to
+          keep the built-in AR experience.
+        </p>
+        <Toggle
+          label="Open external link instead of launching AR"
+          checked={a.externalLinkEnabled ?? false}
+          onChange={v => setAr('externalLinkEnabled', v)}
+        />
+        <Field
+          label="External AR URL (https://…)"
+          value={a.externalLinkUrl ?? ''}
+          onChange={v => setAr('externalLinkUrl', v)}
+        />
+        <Field
+          label="Optional button label override (blank = use configurator copy)"
+          value={a.externalLinkLabel ?? ''}
+          onChange={v => setAr('externalLinkLabel', v)}
+        />
       </Card>
       <Card title="Per-combo AR models">
         <p className="text-[11px] text-bone/40 mb-3">
@@ -790,8 +930,28 @@ function ModelSourceEditor({
   onChange: (s: ModelSource) => void;
 }) {
   const [uploading, setUploading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const dragDepth = useRef(0);
+
+  const acceptList = acceptImages
+    ? ['.png', '.jpg', '.jpeg', '.webp', '.svg']
+    : ['.glb', '.gltf'];
+  const acceptAttr = acceptList.join(',');
+  const acceptMime = acceptImages ? /^image\// : /(model\/gltf|application\/octet-stream|gltf|glb)/i;
+
+  const isValidFile = (file: File): boolean => {
+    const ext = file.name.toLowerCase().split('.').pop();
+    if (ext && acceptList.includes(`.${ext}`)) return true;
+    return acceptMime.test(file.type);
+  };
 
   const upload = async (file: File) => {
+    if (!isValidFile(file)) {
+      setError(`Wrong file type — expected ${acceptList.join(' / ')}`);
+      return;
+    }
+    setError(null);
     setUploading(true);
     try {
       const form = new FormData();
@@ -802,13 +962,65 @@ function ModelSourceEditor({
         headers: adminHeaders(),
         body: form,
       });
-      if (!res.ok) throw new Error('upload failed');
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `upload failed (${res.status})`);
+      }
       const json = (await res.json()) as { slot?: string };
       onChange({ type: 'blob', key: json.slot ?? uploadSlot });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setUploading(false);
     }
   };
+
+  // Drag-and-drop handlers. dragDepth ref counts nested enters so leaving a
+  // child element doesn't clear the highlight prematurely.
+  const resetDrag = () => {
+    dragDepth.current = 0;
+    setDragOver(false);
+  };
+  const onDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    dragDepth.current += 1;
+    if (e.dataTransfer.types.includes('Files')) setDragOver(true);
+  };
+  const onDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    if (e.dataTransfer.types.includes('Files')) e.dataTransfer.dropEffect = 'copy';
+  };
+  const onDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+    // relatedTarget === null when the drag exits the browser window — in that
+    // case dragenter/dragleave can't reconcile, so force the counter to zero
+    // instead of decrementing (which would leave the highlight stuck on).
+    if (e.relatedTarget === null) {
+      resetDrag();
+      return;
+    }
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setDragOver(false);
+  };
+  const onDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    resetDrag();
+    const file = e.dataTransfer.files?.[0];
+    if (file) void upload(file);
+  };
+
+  // Global safety net — drag operations that end outside any registered
+  // dropzone (Esc, dropped onto a non-target, focus loss) reliably zero the
+  // counter even when dragleave never fires.
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const onWindowEnd = () => resetDrag();
+    window.addEventListener('dragend', onWindowEnd);
+    window.addEventListener('drop', onWindowEnd);
+    return () => {
+      window.removeEventListener('dragend', onWindowEnd);
+      window.removeEventListener('drop', onWindowEnd);
+    };
+  }, []);
 
   return (
     <div className="mb-4 last:mb-0">
@@ -838,7 +1050,7 @@ function ModelSourceEditor({
           className="w-full rounded-lg bg-ink/50 border border-bone/10 px-3 py-2 text-xs text-bone"
           value={source.path}
           onChange={e => onChange({ type: 'builtin', path: e.target.value })}
-          placeholder={acceptImages ? '/images/parts/dragon.webp' : '/models/...'}
+          placeholder={acceptImages ? '/images/activated-print.jpg' : '/models/...'}
         />
       )}
       {source.type === 'url' && (
@@ -846,17 +1058,29 @@ function ModelSourceEditor({
           className="w-full rounded-lg bg-ink/50 border border-bone/10 px-3 py-2 text-xs text-bone"
           value={source.url}
           onChange={e => onChange({ type: 'url', url: e.target.value })}
-          placeholder="https://cdn.example.com/model.glb"
+          placeholder={acceptImages ? 'https://cdn.example.com/poster.jpg' : 'https://cdn.example.com/model.glb'}
         />
       )}
       {source.type === 'blob' && (
-        <div className="flex items-center gap-2">
-          <label className="cursor-pointer text-xs text-jc-gold border border-jc-gold/30 px-3 py-1.5 rounded-lg hover:bg-jc-gold/10">
-            {uploading ? 'Uploading…' : acceptImages ? 'Upload image' : 'Upload .glb'}
+        <div
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+          className={`relative rounded-lg border-2 border-dashed transition px-4 py-5 text-center cursor-pointer ${
+            dragOver
+              ? 'border-jc-gold/70 bg-jc-gold/10'
+              : 'border-bone/15 bg-ink/30 hover:border-bone/30'
+          } ${uploading ? 'pointer-events-none opacity-70' : ''}`}
+        >
+          <label className="block cursor-pointer">
             <input
               type="file"
-              accept={acceptImages ? '.png,.jpg,.jpeg,.webp,.svg' : '.glb,.gltf'}
-              className="hidden"
+              accept={acceptAttr}
+              // pointer-events-none guarantees the clipped input never
+              // intercepts drag events; the wrapping <label> still routes
+              // clicks correctly via the label-input association.
+              className="sr-only pointer-events-none"
               disabled={uploading}
               onChange={e => {
                 const f = e.target.files?.[0];
@@ -864,8 +1088,28 @@ function ModelSourceEditor({
                 e.target.value = '';
               }}
             />
+            <div className="text-xs text-bone/80 leading-relaxed">
+              {uploading ? (
+                <span className="text-jc-gold">Uploading…</span>
+              ) : (
+                <>
+                  <span className="text-jc-gold underline-offset-2 hover:underline">
+                    {acceptImages ? 'Choose image' : 'Choose file'}
+                  </span>
+                  <span className="text-bone/45"> or drag & drop here</span>
+                </>
+              )}
+            </div>
+            <div className="mt-1 text-[10px] text-bone/35 font-mono">
+              {acceptList.join(' · ')} &nbsp;·&nbsp; max 120 MB
+            </div>
           </label>
-          <span className="text-[10px] text-bone/40 truncate">/api/models/{source.key}</span>
+          {error && (
+            <div className="mt-2 text-[10px] text-amber-300/90">{error}</div>
+          )}
+          <div className="mt-2 text-[10px] text-bone/40 truncate">
+            Current: <code className="text-bone/55">/api/models/{source.key}</code>
+          </div>
         </div>
       )}
     </div>
@@ -976,6 +1220,58 @@ function ContentTab({
         <Field label="Secondary label" value={c.cta.secondaryLabel} onChange={v => patch({ cta: { ...c.cta, secondaryLabel: v } })} />
         <Field label="Secondary href" value={c.cta.secondaryHref} onChange={v => patch({ cta: { ...c.cta, secondaryHref: v } })} />
         <Field label="Footer line" value={c.footer} onChange={v => patch({ footer: v })} />
+      </Card>
+      <Card title="Activated Print section (bottom of page)">
+        <p className="text-[11px] text-bone/40 mb-3 leading-relaxed">
+          Editorial poster + copy rendered between the inquire CTA and the footer.
+          Toggle off to hide the section entirely.
+        </p>
+        <Toggle
+          label="Show Activated Print section on the live site"
+          checked={c.activatedPrint?.enabled ?? false}
+          onChange={v =>
+            patch({ activatedPrint: { ...c.activatedPrint, enabled: v } })
+          }
+        />
+        <Field
+          label="Eyebrow"
+          value={c.activatedPrint?.eyebrow ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, eyebrow: v } })}
+        />
+        <Field
+          label="Title"
+          value={c.activatedPrint?.title ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, title: v } })}
+        />
+        <Field
+          label="Body"
+          value={c.activatedPrint?.body ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, body: v } })}
+          multiline
+        />
+        <ModelSourceEditor
+          label="Poster image (drag & drop to upload, paste a /images/… path, or supply an https URL)"
+          source={c.activatedPrint?.imageSource ?? { type: 'builtin', path: '/images/activated-print.jpg' }}
+          uploadSlot="images/activated-print"
+          builtinDefault="/images/activated-print.jpg"
+          acceptImages
+          onChange={src => patch({ activatedPrint: { ...c.activatedPrint, imageSource: src } })}
+        />
+        <Field
+          label="Image alt text"
+          value={c.activatedPrint?.imageAlt ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, imageAlt: v } })}
+        />
+        <Field
+          label="CTA label (blank = no button)"
+          value={c.activatedPrint?.ctaLabel ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, ctaLabel: v } })}
+        />
+        <Field
+          label="CTA href"
+          value={c.activatedPrint?.ctaHref ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, ctaHref: v } })}
+        />
       </Card>
     </div>
   );

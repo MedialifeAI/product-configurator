@@ -1,11 +1,26 @@
 import type { ModelQuality } from '@/context/SceneSettings';
 import type { DeviceTier } from '@/lib/deviceTier';
+import { isIosDevice } from '@/lib/ar';
+import { resolveAssetVariant } from '@/lib/assetRouting';
+import type { SiteFeatureFlags } from '@/lib/siteConfigTypes';
 
 export interface RenderQualitySettings {
   dpr: [number, number];
   antialias: boolean;
   /** When true, prefer /models-optimized paths. */
   useOptimizedAssets: boolean;
+  /**
+   * When true, load /models-ios paths (decimated meshes, ~10% triangle count).
+   * Resolved per-session from admin config (`assetVariantByPlatform`) + the
+   * detected platform + URL overrides. Takes precedence over useOptimizedAssets.
+   */
+  useIosAssets: boolean;
+}
+
+export function resolveWebGlPowerPreference(tier: DeviceTier): WebGLPowerPreference {
+  if (isIosDevice()) return 'default';
+  if (tier === 'low') return 'low-power';
+  return 'high-performance';
 }
 
 function tierToQuality(tier: DeviceTier): ModelQuality {
@@ -14,43 +29,49 @@ function tierToQuality(tier: DeviceTier): ModelQuality {
   return 'high';
 }
 
-/** Low preset prefers /models-optimized unless the feature flag is explicitly off. */
-function resolveOptimizedAssets(globalOptimized: boolean | undefined, effective: ModelQuality): boolean {
-  if (globalOptimized === false) return false;
-  if (globalOptimized === true) return true;
-  return effective === 'low';
+/**
+ * Resolve the active asset variant for this session.
+ *
+ * Priority: URL ?variant= → admin `assetVariantByPlatform[detectedPlatform]`
+ *          → legacy `useOptimizedAssets` boolean → hard defaults.
+ */
+function resolveVariantFlags(
+  featureFlags: SiteFeatureFlags | undefined,
+  effective: ModelQuality,
+): { useOptimizedAssets: boolean; useIosAssets: boolean } {
+  const variant = resolveAssetVariant(featureFlags?.assetVariantByPlatform);
+
+  // Variant 'optimized' from admin config / URL override beats the legacy flag.
+  if (variant === 'optimized') return { useOptimizedAssets: true, useIosAssets: false };
+  if (variant === 'ios')       return { useOptimizedAssets: false, useIosAssets: true };
+
+  // variant === 'original' → respect the legacy useOptimizedAssets boolean if
+  // it's explicitly set, otherwise nudge the low quality preset toward optimized
+  // (preserves prior "auto-low → optimized" behaviour from earlier releases).
+  if (featureFlags?.useOptimizedAssets === true)  return { useOptimizedAssets: true,  useIosAssets: false };
+  if (featureFlags?.useOptimizedAssets === false) return { useOptimizedAssets: false, useIosAssets: false };
+  return { useOptimizedAssets: effective === 'low', useIosAssets: false };
 }
 
-/** Map admin model-quality preset to canvas DPR, AA, and asset tier. */
+/** Map admin model-quality preset to canvas DPR, AA, and asset variant. */
 export function resolveRenderQuality(
   quality: ModelQuality,
   tier: DeviceTier,
-  globalOptimized?: boolean,
+  featureFlags?: SiteFeatureFlags,
 ): RenderQualitySettings {
   const effective = quality === 'auto' ? tierToQuality(tier) : quality;
-  const useOptimizedAssets = resolveOptimizedAssets(globalOptimized, effective);
+  const { useOptimizedAssets, useIosAssets } = resolveVariantFlags(featureFlags, effective);
 
   switch (effective) {
     case 'low':
-      return {
-        dpr: [1, 1.25],
-        antialias: false,
-        useOptimizedAssets,
-      };
+      // iOS maps to low tier — keep memory caps but restore MSAA + sharper DPR (no AA looked jagged/blurry).
+      return { dpr: [1, 1.5], antialias: true,  useOptimizedAssets, useIosAssets };
     case 'medium':
-      return {
-        dpr: [1, 1.5],
-        antialias: false,
-        useOptimizedAssets,
-      };
+      return { dpr: [1, 1.5], antialias: false, useOptimizedAssets, useIosAssets };
     case 'high':
-      return {
-        dpr: [1, 2],
-        antialias: true,
-        useOptimizedAssets,
-      };
+      return { dpr: [1, 2],   antialias: true,  useOptimizedAssets, useIosAssets };
     default:
-      return resolveRenderQuality('auto', tier, globalOptimized);
+      return resolveRenderQuality('auto', tier, featureFlags);
   }
 }
 

@@ -41,6 +41,7 @@ next-env.d.ts
 
 # editor / claude
 .claude/settings.local.json
+.cursor/
 .playwright-mcp/
 
 # captured screenshots from the test runs

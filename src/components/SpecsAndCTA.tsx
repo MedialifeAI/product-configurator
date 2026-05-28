@@ -1,6 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
+import ActivatedPrintSection from '@/components/ActivatedPrintSection';
 import { useSiteConfig } from '@/context/SiteConfigProvider';
 import { scrollToConfigurator } from '@/lib/ar';
 
@@ -67,6 +68,8 @@ export default function SpecsAndCTA() {
           <p className="mt-12 text-xs tracking-[0.25em] uppercase text-bone/30">{cta.footerLine}</p>
         </div>
       </section>
+
+      <ActivatedPrintSection />
 
       <footer className="bg-ink border-t border-bone/10 py-8 text-center text-xs text-bone/40">
         © {new Date().getFullYear()} {footer}

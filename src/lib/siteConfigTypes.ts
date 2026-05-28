@@ -87,9 +87,38 @@ export interface SiteFeatures {
   showPerformanceOverlay: boolean;
 }
 
+/**
+ * Which GLB variant to load. See assetRouting.ts for the resolution algorithm.
+ * - 'original'  → /models/         (full quality, ~37M triangles total)
+ * - 'optimized' → /models-optimized/ (Meshopt-encoded; smaller files, same VRAM after decode)
+ * - 'ios'       → /models-ios/     (decimated ~10% triangle count, iOS-safe)
+ */
+export type AssetVariant = 'original' | 'optimized' | 'ios';
+
+export interface AssetVariantByPlatform {
+  desktop?: AssetVariant;
+  android?: AssetVariant;
+  ios?: AssetVariant;
+}
+
 export interface SiteFeatureFlags {
-  /** Serve GLBs from /models-optimized (run `npm run build:assets` first). */
+  /**
+   * Per-platform variant routing. Admin-controlled. When set for a platform,
+   * overrides the hard defaults (desktop/android → original, ios → ios).
+   */
+  assetVariantByPlatform?: AssetVariantByPlatform;
+  /**
+   * Legacy boolean — when assetVariantByPlatform is absent, true forces every
+   * platform to load /models-optimized. Kept for backward compatibility with
+   * older configs; new work should use assetVariantByPlatform.
+   */
   useOptimizedAssets?: boolean;
+  /**
+   * Runtime-only pass-through — true when the current session has resolved to
+   * the 'ios' variant. Helper functions carry it through type-safe option bags.
+   * Never persisted in config; populated from resolveAssetVariant().
+   */
+  useIosAssets?: boolean;
   /** One geometry + PBR tint per metal part (requires identical source meshes). */
   consolidatedMetals?: boolean;
 }
@@ -138,6 +167,16 @@ export interface ArSettings {
    * Enable after per-combo files under `/models/ar/combos/` are Draco-compressed (~15–40 MB each).
    */
   usePerComboArModels: boolean;
+  /**
+   * When true AND `externalLinkUrl` is set, the "View in AR" button opens that
+   * URL in a new tab instead of launching the model-viewer / QR flow. AR mode
+   * remains the default when this is off.
+   */
+  externalLinkEnabled?: boolean;
+  /** Absolute URL opened in a new tab when externalLinkEnabled is true. */
+  externalLinkUrl?: string;
+  /** Optional override for the AR button label when external link is active. */
+  externalLinkLabel?: string;
 }
 
 export const DEFAULT_AR_SETTINGS: ArSettings = {
@@ -155,6 +194,9 @@ export const DEFAULT_AR_SETTINGS: ArSettings = {
   maxPresets: 0,
   tapToPlaceHint: 'Tap the AR button, then place the watch on a flat surface.',
   usePerComboArModels: false,
+  externalLinkEnabled: false,
+  externalLinkUrl: '',
+  externalLinkLabel: '',
 };
 
 export interface SiteContent {
@@ -205,6 +247,26 @@ export interface SiteContent {
     secondaryLabel: string;
     secondaryHref: string;
     footerLine: string;
+  };
+  /**
+   * Editorial section rendered between the inquire CTA and the footer.
+   * Pairs a poster image with marketing copy ("Experience Activated Print").
+   * Hidden when enabled === false.
+   */
+  activatedPrint: {
+    enabled: boolean;
+    eyebrow: string;
+    title: string;
+    body: string;
+    /**
+     * Image source. Either a builtin static path (/images/…), an external
+     * https URL, or an admin-uploaded blob key. Resolved via resolveSource()
+     * the same way model GLBs are.
+     */
+    imageSource: ModelSource;
+    imageAlt: string;
+    ctaLabel: string;
+    ctaHref: string;
   };
   footer: string;
 }
@@ -441,6 +503,17 @@ export const DEFAULT_CONTENT: SiteContent = {
     secondaryHref: 'https://jacobandco.com/boutiques',
     footerLine: 'Geneva · Monaco · New York · Dubai · Hong Kong · Tokyo',
   },
+  activatedPrint: {
+    enabled: true,
+    eyebrow: 'Beyond the page',
+    title: 'Experience Activated Print',
+    body:
+      'Scan the catalog. Watch the Astronomia Dragon come alive in your space. A printed page, an animated tourbillon — one continuous artifact.',
+    imageSource: { type: 'builtin', path: '/images/activated-print.jpg' },
+    imageAlt: 'Astronomia Dragon — Activated Print catalog spread',
+    ctaLabel: '',
+    ctaHref: '',
+  },
   footer: '© Jacob & Co. · Astronomia Dragon · This page is an interactive presentation.',
 };
 
@@ -454,6 +527,11 @@ export const DEFAULT_SITE_CONFIG: SiteConfig = {
   featureFlags: {
     useOptimizedAssets: false,
     consolidatedMetals: false,
+    assetVariantByPlatform: {
+      desktop: 'original',
+      android: 'original',
+      ios: 'ios',
+    },
   },
   materialOverrides: {
     metal: DEFAULT_METAL_OVERRIDES,

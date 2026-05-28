@@ -167,6 +167,16 @@ export interface ArSettings {
    * Enable after per-combo files under `/models/ar/combos/` are Draco-compressed (~15–40 MB each).
    */
   usePerComboArModels: boolean;
+  /**
+   * When true AND `externalLinkUrl` is set, the "View in AR" button opens that
+   * URL in a new tab instead of launching the model-viewer / QR flow. AR mode
+   * remains the default when this is off.
+   */
+  externalLinkEnabled?: boolean;
+  /** Absolute URL opened in a new tab when externalLinkEnabled is true. */
+  externalLinkUrl?: string;
+  /** Optional override for the AR button label when external link is active. */
+  externalLinkLabel?: string;
 }
 
 export const DEFAULT_AR_SETTINGS: ArSettings = {
@@ -184,6 +194,9 @@ export const DEFAULT_AR_SETTINGS: ArSettings = {
   maxPresets: 0,
   tapToPlaceHint: 'Tap the AR button, then place the watch on a flat surface.',
   usePerComboArModels: false,
+  externalLinkEnabled: false,
+  externalLinkUrl: '',
+  externalLinkLabel: '',
 };
 
 export interface SiteContent {
@@ -234,6 +247,21 @@ export interface SiteContent {
     secondaryLabel: string;
     secondaryHref: string;
     footerLine: string;
+  };
+  /**
+   * Editorial section rendered between the inquire CTA and the footer.
+   * Pairs a poster image with marketing copy ("Experience Activated Print").
+   * Hidden when enabled === false.
+   */
+  activatedPrint: {
+    enabled: boolean;
+    eyebrow: string;
+    title: string;
+    body: string;
+    imageUrl: string;
+    imageAlt: string;
+    ctaLabel: string;
+    ctaHref: string;
   };
   footer: string;
 }
@@ -469,6 +497,17 @@ export const DEFAULT_CONTENT: SiteContent = {
     secondaryLabel: 'Find a boutique',
     secondaryHref: 'https://jacobandco.com/boutiques',
     footerLine: 'Geneva · Monaco · New York · Dubai · Hong Kong · Tokyo',
+  },
+  activatedPrint: {
+    enabled: true,
+    eyebrow: 'Beyond the page',
+    title: 'Experience Activated Print',
+    body:
+      'Scan the catalog. Watch the Astronomia Dragon come alive in your space. A printed page, an animated tourbillon — one continuous artifact.',
+    imageUrl: '/images/activated-print.jpg',
+    imageAlt: 'Astronomia Dragon — Activated Print catalog spread',
+    ctaLabel: '',
+    ctaHref: '',
   },
   footer: '© Jacob & Co. · Astronomia Dragon · This page is an interactive presentation.',
 };

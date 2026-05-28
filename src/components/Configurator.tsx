@@ -500,6 +500,15 @@ export default function Configurator({
 
   const openArHandoff = (handoff: { dragon: DragonId; metal: MetalId }) => {
     if (typeof window === 'undefined') return;
+
+    // Admin override: redirect to an external URL instead of launching AR.
+    // Useful when AR is hosted elsewhere (Echo3D viewer, Spark AR, etc).
+    const ar = config.ar;
+    if (ar?.externalLinkEnabled && ar.externalLinkUrl && ar.externalLinkUrl.trim()) {
+      window.open(ar.externalLinkUrl.trim(), '_blank', 'noopener,noreferrer');
+      return;
+    }
+
     if (isIosDevice()) {
       releaseConfiguratorGltfCache(catalog, config, handoff.dragon, handoff.metal, globeMetal);
       setArSessionOpen(true);
@@ -921,7 +930,11 @@ export default function Configurator({
                     />
                     <span className="relative flex items-center justify-center gap-3 text-bone">
                       <ArGlyph className="w-4 h-4 text-jc-gold" />
-                      <span className="text-[10px] uppercase tracking-[0.28em]">{copy.arButtonLabel}</span>
+                      <span className="text-[10px] uppercase tracking-[0.28em]">
+                        {arSettings?.externalLinkEnabled && arSettings.externalLinkLabel?.trim()
+                          ? arSettings.externalLinkLabel
+                          : copy.arButtonLabel}
+                      </span>
                     </span>
                   </button>
                   <div className="mt-2 text-center text-[10px] text-bone/40 tracking-[0.15em]">

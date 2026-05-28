@@ -74,6 +74,7 @@ function deepMergeContent(
       rows: patch.specs?.rows ?? base.specs.rows,
     },
     cta: { ...base.cta, ...patch.cta },
+    activatedPrint: { ...base.activatedPrint, ...patch.activatedPrint },
     footer: patch.footer ?? base.footer,
   };
 }

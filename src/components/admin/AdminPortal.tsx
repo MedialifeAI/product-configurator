@@ -520,6 +520,28 @@ function ArTab({
         <Slider label="Max presets (0 = all)" value={a.maxPresets} min={0} max={12} step={1} onChange={v => setAr('maxPresets', Math.round(v))} />
         <Field label="Tap-to-place hint" value={a.tapToPlaceHint} onChange={v => setAr('tapToPlaceHint', v)} multiline />
       </Card>
+      <Card title="External AR link (override)">
+        <p className="text-[11px] text-bone/40 mb-3 leading-relaxed">
+          When enabled <strong>and</strong> a URL is set, the View in AR button opens that URL in
+          a new tab instead of launching the model-viewer / QR flow. Leave the toggle off to
+          keep the built-in AR experience.
+        </p>
+        <Toggle
+          label="Open external link instead of launching AR"
+          checked={a.externalLinkEnabled ?? false}
+          onChange={v => setAr('externalLinkEnabled', v)}
+        />
+        <Field
+          label="External AR URL (https://…)"
+          value={a.externalLinkUrl ?? ''}
+          onChange={v => setAr('externalLinkUrl', v)}
+        />
+        <Field
+          label="Optional button label override (blank = use configurator copy)"
+          value={a.externalLinkLabel ?? ''}
+          onChange={v => setAr('externalLinkLabel', v)}
+        />
+      </Card>
       <Card title="Per-combo AR models">
         <p className="text-[11px] text-bone/40 mb-3">
           Default: assembled GLB at <code className="text-bone/55">/models/ar/combos/&#123;dragon&#125;_&#123;metal&#125;.glb</code> (12 files).
@@ -1104,6 +1126,55 @@ function ContentTab({
         <Field label="Secondary label" value={c.cta.secondaryLabel} onChange={v => patch({ cta: { ...c.cta, secondaryLabel: v } })} />
         <Field label="Secondary href" value={c.cta.secondaryHref} onChange={v => patch({ cta: { ...c.cta, secondaryHref: v } })} />
         <Field label="Footer line" value={c.footer} onChange={v => patch({ footer: v })} />
+      </Card>
+      <Card title="Activated Print section (bottom of page)">
+        <p className="text-[11px] text-bone/40 mb-3 leading-relaxed">
+          Editorial poster + copy rendered between the inquire CTA and the footer.
+          Toggle off to hide the section entirely.
+        </p>
+        <Toggle
+          label="Show Activated Print section on the live site"
+          checked={c.activatedPrint?.enabled ?? false}
+          onChange={v =>
+            patch({ activatedPrint: { ...c.activatedPrint, enabled: v } })
+          }
+        />
+        <Field
+          label="Eyebrow"
+          value={c.activatedPrint?.eyebrow ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, eyebrow: v } })}
+        />
+        <Field
+          label="Title"
+          value={c.activatedPrint?.title ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, title: v } })}
+        />
+        <Field
+          label="Body"
+          value={c.activatedPrint?.body ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, body: v } })}
+          multiline
+        />
+        <Field
+          label="Image URL (paste a /images/… path or an absolute https URL)"
+          value={c.activatedPrint?.imageUrl ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, imageUrl: v } })}
+        />
+        <Field
+          label="Image alt text"
+          value={c.activatedPrint?.imageAlt ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, imageAlt: v } })}
+        />
+        <Field
+          label="CTA label (blank = no button)"
+          value={c.activatedPrint?.ctaLabel ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, ctaLabel: v } })}
+        />
+        <Field
+          label="CTA href"
+          value={c.activatedPrint?.ctaHref ?? ''}
+          onChange={v => patch({ activatedPrint: { ...c.activatedPrint, ctaHref: v } })}
+        />
       </Card>
     </div>
   );

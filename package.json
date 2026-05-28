@@ -17,6 +17,7 @@
     "build:assets": "node scripts/build-assets.mjs",
     "build:usdz": "node scripts/build-usdz.mjs",
     "upload:ar-usdz": "node scripts/upload-ar-usdz.mjs",
+    "upload:ar-assets": "node scripts/upload-ar-assets.mjs",
     "verify:metal-geometry": "node scripts/verify-metal-geometry.mjs",
     "compress": "bash scripts/compress.sh",
     "compress:ar": "node scripts/compress-ar-hero.mjs",

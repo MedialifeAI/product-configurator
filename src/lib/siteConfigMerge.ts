@@ -29,7 +29,16 @@ export function mergeSiteConfig(partial: unknown): SiteConfig {
   return {
     version: SITE_CONFIG_VERSION,
     features: { ...DEFAULT_SITE_CONFIG.features, ...p.features },
-    featureFlags: { ...DEFAULT_SITE_CONFIG.featureFlags, ...p.featureFlags },
+    featureFlags: {
+      ...DEFAULT_SITE_CONFIG.featureFlags,
+      ...p.featureFlags,
+      // Deep-merge so an admin save touching only one platform key doesn't
+      // wipe the defaults for the other two.
+      assetVariantByPlatform: {
+        ...DEFAULT_SITE_CONFIG.featureFlags?.assetVariantByPlatform,
+        ...p.featureFlags?.assetVariantByPlatform,
+      },
+    },
     materialOverrides: {
       metal: {
         ...DEFAULT_METAL_OVERRIDES,

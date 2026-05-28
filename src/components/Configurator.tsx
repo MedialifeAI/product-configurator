@@ -510,7 +510,7 @@ export default function Configurator({
     }
 
     if (isIosDevice()) {
-      releaseConfiguratorGltfCache(catalog, config, handoff.dragon, handoff.metal, globeMetal);
+      releaseConfiguratorGltfCache(catalog, config, handoff.dragon, handoff.metal, globeMetal, urlOpts);
       setArSessionOpen(true);
     }
     warmArCatalogUrl(arWatchUrl(catalog, urlOpts));
@@ -543,12 +543,19 @@ export default function Configurator({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount for URL handoff
   }, []);
 
+  const isExternalArMode = Boolean(
+    config.ar?.externalLinkEnabled && config.ar.externalLinkUrl?.trim(),
+  );
+
   const handleArClick = () => {
-    warmArCatalogUrl(arWatchUrl(catalog, urlOpts));
+    // openArHandoff handles its own preload after the external-link check —
+    // calling it again here wastes a 15 MB fetch in external-link mode.
     openArHandoff({ dragon, metal });
   };
 
   const onArButtonHover = () => {
+    // Skip the GLB preload when an external link will be opened instead.
+    if (isExternalArMode) return;
     warmArCatalogUrl(arWatchUrl(catalog, urlOpts));
   };
 

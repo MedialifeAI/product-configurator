@@ -34,7 +34,7 @@ type Tab = 'overview' | 'features' | 'scene' | 'ar' | 'models' | 'content' | 'th
 
 const TABS: { id: Tab; label: string; preview?: PreviewMode }[] = [
   { id: 'overview',  label: 'Overview' },
-  { id: 'features',  label: 'Features' },
+  { id: 'features',  label: 'Features', preview: 'hero' },
   { id: 'scene',     label: 'Scene',    preview: 'both' },
   { id: 'ar',        label: 'AR',       preview: 'configurator' },
   { id: 'models',    label: '3D Models', preview: 'hero' },
@@ -362,7 +362,7 @@ function OverviewTab({ config, setTab }: { config: SiteConfig; setTab: (t: Tab) 
       </Card>
 
       <Card title="Current state">
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px]">
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-[11px] mb-4">
           <dt className="text-bone/45">Dragon variants</dt><dd className="text-bone">{config.catalog.dragons.length}</dd>
           <dt className="text-bone/45">Metal finishes</dt><dd className="text-bone">{config.catalog.metals.length}</dd>
           <dt className="text-bone/45">Story panels</dt><dd className="text-bone">{config.content.storyPanels.length}</dd>
@@ -370,6 +370,29 @@ function OverviewTab({ config, setTab }: { config: SiteConfig; setTab: (t: Tab) 
           <dt className="text-bone/45">Activated Print</dt><dd className="text-bone">{config.content.activatedPrint?.enabled ? 'Visible' : 'Hidden'}</dd>
           <dt className="text-bone/45">Performance HUD</dt><dd className="text-bone">{config.features.showPerformanceOverlay ? 'On' : 'Off'}</dd>
         </dl>
+        {/* Per-platform asset variant summary */}
+        <div className="border-t border-bone/8 pt-3">
+          <p className="text-[9px] uppercase tracking-wider text-bone/30 mb-2">Asset variants</p>
+          <div className="grid grid-cols-3 gap-2">
+            {(['desktop', 'android', 'ios'] as const).map(p => {
+              const v = config.featureFlags?.assetVariantByPlatform?.[p] ?? (p === 'ios' ? 'ios' : 'original');
+              const risk = platformRisk(p, v);
+              const opt = ASSET_VARIANT_OPTIONS.find(o => o.value === v);
+              return (
+                <div key={p} className="rounded-lg bg-ink/40 border border-bone/8 px-2.5 py-2">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[9px] uppercase tracking-wider text-bone/35">{p}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${RISK_DOT[risk]}`} />
+                  </div>
+                  <span className="text-[10px] text-bone/80 leading-snug block">{opt?.label ?? v}</span>
+                  {opt?.expectedMb != null && (
+                    <span className="text-[9px] text-bone/30 font-mono">~{opt.expectedMb} MB</span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </Card>
     </div>
   );
@@ -413,12 +436,48 @@ function FeaturesTab({ config, setConfig }: { config: SiteConfig; setConfig: (fn
 // Asset variant card — extended with ios-mh / ios-xh tiers
 // ─────────────────────────────────────────────────────────────
 
-const ASSET_VARIANT_OPTIONS: { value: AssetVariant; label: string; hint: string; badge?: string }[] = [
-  { value: 'original',  label: 'Original',          hint: '/models — full 37M tri',                   badge: 'Desktop' },
-  { value: 'optimized', label: 'Optimized',          hint: '/models-optimized — smaller download'  },
-  { value: 'ios',       label: 'iOS Ultra-Low',      hint: '/models-ios — ~500K tri, all iPhones',     badge: 'Safe' },
-  { value: 'ios-mh',   label: 'iOS Medium-High',    hint: '/models-ios-mh — ~2.2M tri, iPhone 13+' },
-  { value: 'ios-xh',   label: 'iOS Extra-High',     hint: '/models-ios-xh — ~3.5M tri, iPhone 15 Pro+' },
+type VariantRisk = 'safe' | 'moderate' | 'risky';
+
+interface VariantOption {
+  value: AssetVariant;
+  label: string;
+  hint: string;
+  badge?: string;
+  /** Expected heap when this variant is the active hero on a real device. */
+  expectedMb?: number;
+  /** Risk when used on iOS specifically (desktop/android are always at most 'moderate'). */
+  iosRisk: VariantRisk;
+}
+
+const RISK_DOT: Record<VariantRisk, string> = {
+  safe:     'bg-emerald-400',
+  moderate: 'bg-yellow-400',
+  risky:    'bg-red-400',
+};
+const RISK_TEXT: Record<VariantRisk, string> = {
+  safe:     'text-emerald-400',
+  moderate: 'text-yellow-400',
+  risky:    'text-red-400',
+};
+const RISK_LABEL: Record<VariantRisk, string> = {
+  safe:     'Safe',
+  moderate: 'Moderate',
+  risky:    'Risky',
+};
+
+function platformRisk(platform: 'desktop' | 'android' | 'ios', v: AssetVariant): VariantRisk {
+  const opt = ASSET_VARIANT_OPTIONS.find(o => o.value === v);
+  if (!opt) return 'moderate';
+  if (platform !== 'ios') return v === 'original' ? 'safe' : 'safe';
+  return opt.iosRisk;
+}
+
+const ASSET_VARIANT_OPTIONS: VariantOption[] = [
+  { value: 'original',  label: 'Original',       hint: '/models — full 37M tri',                    badge: 'Desktop', expectedMb: 541, iosRisk: 'risky'    },
+  { value: 'optimized', label: 'Optimized',       hint: '/models-optimized — parts only, hero falls back',           expectedMb: 432, iosRisk: 'risky'    },
+  { value: 'ios',       label: 'iOS Ultra-Low',   hint: '/models-ios — ~500K tri, all iPhones',      badge: 'Safe',    expectedMb: 231, iosRisk: 'safe'     },
+  { value: 'ios-mh',   label: 'iOS Medium-High', hint: '/models-ios-mh — ~2.2M tri, iPhone 13+',                    expectedMb: 253, iosRisk: 'moderate' },
+  { value: 'ios-xh',   label: 'iOS Extra-High',  hint: '/models-ios-xh — ~3.5M tri, iPhone 15 Pro+',               expectedMb: 279, iosRisk: 'risky'    },
 ];
 
 function AssetVariantCard({
@@ -453,54 +512,141 @@ function AssetVariantCard({
         are higher-fidelity alternatives for the hero watch on newer devices.
       </p>
 
-      <div className="space-y-3">
-        {(['desktop', 'android', 'ios'] as const).map(platform => (
-          <div key={platform}>
-            <label className="text-[10px] uppercase tracking-wider text-bone/45 block mb-1.5">{platform}</label>
-            <div className="grid grid-cols-1 gap-1">
-              {ASSET_VARIANT_OPTIONS.map(opt => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setVariant(platform, opt.value)}
-                  className={`flex items-center gap-3 rounded-lg px-3 py-2 border text-left transition ${
-                    (variants[platform] ?? (platform === 'ios' ? 'ios' : 'original')) === opt.value
-                      ? 'border-jc-gold/50 bg-jc-gold/8 text-bone'
-                      : 'border-bone/8 bg-ink/20 text-bone/55 hover:border-bone/20 hover:text-bone/80'
-                  }`}
-                >
-                  <span className={`w-3 h-3 rounded-full border-2 shrink-0 ${
-                    (variants[platform] ?? (platform === 'ios' ? 'ios' : 'original')) === opt.value
-                      ? 'border-jc-gold bg-jc-gold'
-                      : 'border-bone/25'
-                  }`} />
-                  <span className="flex-1 min-w-0">
-                    <span className="text-[11px] font-medium">{opt.label}</span>
-                    {opt.badge && (
-                      <span className="ml-1.5 text-[9px] uppercase tracking-wider text-jc-gold/60 border border-jc-gold/25 rounded px-1 py-px">
-                        {opt.badge}
+      <div className="space-y-4">
+        {(['desktop', 'android', 'ios'] as const).map(platform => {
+          const active = variants[platform] ?? (platform === 'ios' ? 'ios' : 'original');
+          const activeOpt = ASSET_VARIANT_OPTIONS.find(o => o.value === active);
+          const risk = platformRisk(platform, active);
+
+          return (
+            <div key={platform}>
+              {/* Platform header with active summary */}
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="text-[10px] uppercase tracking-wider text-bone/45">{platform}</label>
+                <div className="flex items-center gap-1.5">
+                  {activeOpt?.expectedMb != null && (
+                    <span className="text-[9px] text-bone/30 font-mono">~{activeOpt.expectedMb} MB</span>
+                  )}
+                  <span className={`w-1.5 h-1.5 rounded-full ${RISK_DOT[risk]}`} title={RISK_LABEL[risk]} />
+                  <span className={`text-[9px] ${RISK_TEXT[risk]}`}>{RISK_LABEL[risk]}</span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-1">
+                {ASSET_VARIANT_OPTIONS.map(opt => {
+                  const optRisk = platformRisk(platform, opt.value);
+                  const isActive = active === opt.value;
+                  return (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setVariant(platform, opt.value)}
+                      className={`flex items-center gap-3 rounded-lg px-3 py-2 border text-left transition ${
+                        isActive
+                          ? 'border-jc-gold/50 bg-jc-gold/8 text-bone'
+                          : 'border-bone/8 bg-ink/20 text-bone/55 hover:border-bone/20 hover:text-bone/80'
+                      }`}
+                    >
+                      {/* Radio dot */}
+                      <span className={`w-3 h-3 rounded-full border-2 shrink-0 ${
+                        isActive ? 'border-jc-gold bg-jc-gold' : 'border-bone/25'
+                      }`} />
+
+                      {/* Label + hint */}
+                      <span className="flex-1 min-w-0">
+                        <span className="text-[11px] font-medium">{opt.label}</span>
+                        {opt.badge && (
+                          <span className="ml-1.5 text-[9px] uppercase tracking-wider text-jc-gold/60 border border-jc-gold/25 rounded px-1 py-px">
+                            {opt.badge}
+                          </span>
+                        )}
+                        <span className="block text-[10px] text-bone/35 font-mono mt-0.5 truncate">{opt.hint}</span>
                       </span>
-                    )}
-                    <span className="block text-[10px] text-bone/35 font-mono mt-0.5 truncate">{opt.hint}</span>
-                  </span>
-                </button>
-              ))}
+
+                      {/* Risk indicator + memory */}
+                      <span className="shrink-0 flex flex-col items-end gap-0.5">
+                        <span className={`w-1.5 h-1.5 rounded-full ${RISK_DOT[optRisk]}`} title={RISK_LABEL[optRisk]} />
+                        {opt.expectedMb != null && (
+                          <span className="text-[8px] text-bone/25 font-mono">{opt.expectedMb}MB</span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Warning banner for risky iOS selections */}
+              {platform === 'ios' && risk === 'risky' && (
+                <div className="mt-1.5 rounded-lg bg-red-500/10 border border-red-500/25 px-3 py-2 flex items-start gap-2">
+                  <span className="text-red-400 text-[11px] shrink-0 mt-0.5">⚠</span>
+                  <p className="text-[10px] text-red-300/80 leading-relaxed">
+                    {active === 'original'
+                      ? 'Full quality (~541 MB) will likely crash iOS Safari. Switch to iOS Ultra-Low for crash-safe delivery.'
+                      : 'Extra-High (~279 MB) may crash on older iPhones. Requires iPhone 15 Pro or newer.'}
+                  </p>
+                </div>
+              )}
+              {platform === 'ios' && risk === 'moderate' && (
+                <div className="mt-1.5 rounded-lg bg-yellow-500/8 border border-yellow-500/20 px-3 py-2 flex items-start gap-2">
+                  <span className="text-yellow-400 text-[11px] shrink-0 mt-0.5">ℹ</span>
+                  <p className="text-[10px] text-yellow-300/70 leading-relaxed">
+                    Medium-High (~253 MB) works well on iPhone 13+. May be slow on older models.
+                  </p>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
-      <div className="mt-4 rounded-lg border border-bone/10 bg-ink/40 px-3 py-2.5 text-[10px] text-bone/60 leading-relaxed space-y-1">
-        <div className="flex items-center gap-2">
+      {/* Footer: this-browser status + QA preview links */}
+      <div className="mt-4 rounded-lg border border-bone/10 bg-ink/40 px-3 py-2.5 space-y-2">
+        <div className="flex items-center gap-2 text-[10px]">
           <span className="text-bone/35 uppercase tracking-wider">This browser</span>
           <span className="text-bone font-medium">{resolved.platform}</span>
           <span className="text-bone/35">→</span>
           <span className="text-jc-gold/80 font-medium">{resolved.variant}</span>
+          {(() => {
+            const opt = ASSET_VARIANT_OPTIONS.find(o => o.value === resolved.variant);
+            const r = platformRisk(resolved.platform as 'desktop' | 'android' | 'ios', resolved.variant);
+            return opt ? (
+              <span className={`text-[9px] ${RISK_TEXT[r]}`}>· {RISK_LABEL[r]}</span>
+            ) : null;
+          })()}
         </div>
-        <div className="text-bone/30 font-mono">
-          QA: <span className="text-jc-gold/50">?platform=ios|android|desktop</span>
+
+        {/* QA platform preview links */}
+        <div className="flex flex-wrap gap-1.5">
+          <span className="text-[9px] text-bone/25 uppercase tracking-wider self-center">Preview as</span>
+          {(['ios', 'android', 'desktop'] as const).map(p => (
+            <a
+              key={p}
+              href={`/?platform=${p}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[9px] text-jc-gold/60 border border-jc-gold/20 rounded px-2 py-0.5 hover:bg-jc-gold/8 hover:text-jc-gold transition font-mono"
+            >
+              {p}
+            </a>
+          ))}
+          <span className="text-[9px] text-bone/20 self-center">·</span>
+          {(['ios', 'ios-mh', 'ios-xh'] as const).map(v => (
+            <a
+              key={v}
+              href={`/?platform=ios&hero-variant=${v === 'ios' ? 'ios' : v.replace('ios-', '')}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[9px] text-bone/40 border border-bone/12 rounded px-2 py-0.5 hover:border-bone/25 hover:text-bone/60 transition font-mono"
+            >
+              {v}
+            </a>
+          ))}
+        </div>
+
+        <div className="text-[9px] text-bone/25 font-mono leading-relaxed">
+          <span className="text-jc-gold/40">?platform=ios|android|desktop</span>
           {' · '}
-          <span className="text-jc-gold/50">?variant=original|optimized|ios|ios-mh|ios-xh</span>
+          <span className="text-jc-gold/40">?hero-variant=ios|mh|xh</span>
         </div>
       </div>
     </Card>

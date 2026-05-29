@@ -60,7 +60,11 @@ function applyAssetVariant(
     }
     return toIosModelPath(path, true);
   }
-  if (options?.useOptimizedAssets) return toOptimizedModelPath(path, true);
+  if (options?.useOptimizedAssets) {
+    // Optimized files only exist for parts (case, case_body, dragon) — not for
+    // the full_watch hero model. Fall back to original for unoptimized paths.
+    if (!path.includes('/full_watch/')) return toOptimizedModelPath(path, true);
+  }
   return path;
 }
 

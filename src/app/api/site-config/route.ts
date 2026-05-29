@@ -5,6 +5,10 @@ import { assertSceneSettingsAdmin } from '@/lib/sceneSettingsAuth';
 import type { SiteConfig } from '@/lib/siteConfigTypes';
 
 export const runtime = 'nodejs';
+// Opt out of static prerendering: this route reads/writes a database and must
+// run as a live function. Without this, Next.js bakes the GET response at build
+// time and only GET/HEAD survive — PUT then returns 405 (Allow: GET, HEAD).
+export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {

@@ -5,6 +5,10 @@ import { DEFAULT_SETTINGS, type SceneSettings } from '@/context/SceneSettings';
 import { mergeWithDefaults } from '@/lib/sceneSettingsShared';
 
 export const runtime = 'nodejs';
+// Opt out of static prerendering: this route reads/writes a database and must
+// run as a live function. Without this, Next.js bakes the GET response at build
+// time and only GET/HEAD survive — PUT then returns 405 (Allow: GET, HEAD).
+export const dynamic = 'force-dynamic';
 
 /** Legacy API — reads/writes scene slice of unified site config. */
 export async function GET() {

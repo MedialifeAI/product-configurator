@@ -11,6 +11,7 @@ import {
 } from '@/context/SiteConfigProvider';
 import { arComboKey } from '@/lib/arSettings';
 import AdminScenePreviews, { type PreviewMode } from '@/components/admin/AdminScenePreviews';
+import ModelSlotPreview, { ModelPreviewProvider } from '@/components/admin/ModelSlotPreview';
 import {
   ADMIN_TOKEN_STORAGE_KEY,
   builtinArComboPath,
@@ -37,7 +38,7 @@ const TABS: { id: Tab; label: string; preview?: PreviewMode }[] = [
   { id: 'features',  label: 'Features', preview: 'hero' },
   { id: 'scene',     label: 'Scene',    preview: 'both' },
   { id: 'ar',        label: 'AR',       preview: 'configurator' },
-  { id: 'models',    label: '3D Models', preview: 'hero' },
+  { id: 'models',    label: '3D Models', preview: 'both' },
   { id: 'content',   label: 'Content' },
   { id: 'theme',     label: 'Theme' },
 ];
@@ -162,6 +163,7 @@ export default function AdminPortal() {
   const previewMode = activeTab.preview;
 
   return (
+   <ModelPreviewProvider>
     <div className="min-h-screen bg-ink text-bone">
       {/* ── Sticky header ── */}
       <header className="sticky top-0 z-40 border-b border-bone/10 bg-ink/95 backdrop-blur-md">
@@ -245,6 +247,7 @@ export default function AdminPortal() {
         )}
       </main>
     </div>
+   </ModelPreviewProvider>
   );
 }
 
@@ -1180,6 +1183,12 @@ function ModelSourceEditor({ label, source, uploadSlot, builtinDefault, acceptIm
   const acceptAttr = acceptList.join(',');
   const acceptMime = acceptImages ? /^image\// : /(model\/gltf|application\/octet-stream|gltf|glb)/i;
   const isValidFile = (f: File) => { const ext = f.name.toLowerCase().split('.').pop(); return (ext && acceptList.includes(`.${ext}`)) || acceptMime.test(f.type); };
+  const maxLabel = acceptImages ? 'max 8 MB' : 'max 80 MB';
+  const resolvedUrl =
+    source.type === 'builtin' ? (source.path?.trim() || builtinDefault || null)
+    : source.type === 'url'   ? (source.url?.trim() || null)
+    : source.key              ? `/api/models/${source.key}`
+    : null;
 
   const upload = async (file: File) => {
     if (!isValidFile(file)) { setError(`Wrong type — expected ${acceptList.join(' / ')}`); return; }
@@ -1246,7 +1255,7 @@ function ModelSourceEditor({ label, source, uploadSlot, builtinDefault, acceptIm
                 <><span className="text-jc-gold underline-offset-2 hover:underline">{acceptImages ? 'Choose image' : 'Choose file'}</span><span className="text-bone/35"> or drag & drop</span></>
               )}
             </div>
-            <div className="mt-0.5 text-[9px] text-bone/30 font-mono">{acceptList.join(' · ')} · max 120 MB</div>
+            <div className="mt-0.5 text-[9px] text-bone/30 font-mono">{acceptList.join(' · ')} · {maxLabel}</div>
           </label>
           {error && <div className="mt-1.5 text-[10px] text-amber-300/80">{error}</div>}
           <div className="mt-1 text-[9px] text-bone/30 truncate font-mono">
@@ -1254,6 +1263,12 @@ function ModelSourceEditor({ label, source, uploadSlot, builtinDefault, acceptIm
           </div>
         </div>
       )}
+      <ModelSlotPreview
+        id={uploadSlot}
+        url={resolvedUrl}
+        kind={acceptImages ? 'image' : 'model'}
+        sourceLabel={source.type === 'blob' ? 'upload' : source.type}
+      />
     </div>
   );
 }

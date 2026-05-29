@@ -2,21 +2,29 @@
  * Site-config persistence layer.
  *
  * Storage priority:
- *   1. Netlify Database  — used when NETLIFY=true (set automatically by the
- *      Netlify CLI / runtime). Requires `netlify dev` or a deployed Netlify
- *      function context.
+ *   1. Netlify Blobs — used when NETLIFY=true (set automatically by the Netlify
+ *      CLI / runtime). This is the same serverless-native store the model-upload
+ *      pipeline uses (see modelBlobs.ts), so it needs no provisioning and works
+ *      on the read-only function filesystem.
  *   2. Local JSON file (.data/site-config.json) — automatic fallback for plain
  *      `npm run dev` so the admin portal works without the Netlify CLI.
  *
  * No code changes needed to switch — the layer detects context at runtime.
+ *
+ * NOTE: An earlier version persisted to Netlify Database (@netlify/database).
+ * On production that backend was never provisioned, so every write threw and
+ * fell back to a local-file write — which fails with EROFS on the read-only
+ * serverless filesystem, surfacing as a 500. Blobs removes both failure modes.
  */
 
+import { getDeployStore, getStore } from '@netlify/blobs';
 import { mergeSiteConfig, stripBlobUrlsFromScene } from '@/lib/siteConfigMerge';
 import { DEFAULT_SITE_CONFIG, type SiteConfig } from '@/lib/siteConfigTypes';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-const SCOPE = 'site';
+const STORE_NAME = 'jacobco-site-config';
+const BLOB_KEY   = 'config.json';
 const LOCAL_DIR  = join(process.cwd(), '.data');
 const LOCAL_PATH = join(LOCAL_DIR, 'site-config.json');
 
@@ -48,39 +56,38 @@ function saveLocalConfig(config: SiteConfig): string {
   return writeLocalStore({ ...config, scene: stripBlobUrlsFromScene(config.scene) });
 }
 
-// ─── Netlify Database backend ─────────────────────────────────────────────────
-// Only imported when the Netlify CLI / runtime sets NETLIFY=true.
-// This avoids the package's connection code running during plain `npm run dev`.
+// ─── Netlify Blobs backend ──────────────────────────────────────────────────
+// Active when the Netlify CLI / runtime sets NETLIFY=true. Mirrors modelBlobs.ts:
+// strong consistency for production reads, deploy-scoped store otherwise.
 
 const IS_NETLIFY = process.env.NETLIFY === 'true';
 
-interface Row { payload: unknown; updated_at: string }
-
-async function netlifyLoad(): Promise<{ config: SiteConfig; updatedAt: string | null }> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getDatabase } = require('@netlify/database') as { getDatabase: () => { sql: (...args: unknown[]) => Promise<unknown[]> } };
-  const db = getDatabase();
-  const rows = (await db.sql`
-    SELECT payload, updated_at FROM scene_settings WHERE scope = ${SCOPE} LIMIT 1
-  `) as Row[];
-  const row = rows[0];
-  if (!row?.payload) return { config: DEFAULT_SITE_CONFIG, updatedAt: null };
-  return { config: mergeSiteConfig(row.payload), updatedAt: row.updated_at ?? null };
+interface BlobStore {
+  config: SiteConfig;
+  updatedAt: string;
 }
 
-async function netlifySave(config: SiteConfig): Promise<string> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getDatabase } = require('@netlify/database') as { getDatabase: () => { sql: (...args: unknown[]) => Promise<unknown[]> } };
-  const db = getDatabase();
-  const payload = { ...config, scene: stripBlobUrlsFromScene(config.scene) };
-  const rows = (await db.sql`
-    INSERT INTO scene_settings (scope, payload, updated_at)
-    VALUES (${SCOPE}, ${JSON.stringify(payload)}::jsonb, NOW())
-    ON CONFLICT (scope) DO UPDATE
-      SET payload = EXCLUDED.payload, updated_at = NOW()
-    RETURNING updated_at
-  `) as { updated_at: string }[];
-  return rows[0]?.updated_at ?? new Date().toISOString();
+function configStore() {
+  if (process.env.CONTEXT === 'production') {
+    return getStore({ name: STORE_NAME, consistency: 'strong' });
+  }
+  return getDeployStore(STORE_NAME);
+}
+
+async function blobLoad(): Promise<{ config: SiteConfig; updatedAt: string | null }> {
+  const store = (await configStore().get(BLOB_KEY, { type: 'json' })) as BlobStore | null;
+  if (!store?.config) return { config: DEFAULT_SITE_CONFIG, updatedAt: null };
+  return { config: mergeSiteConfig(store.config), updatedAt: store.updatedAt ?? null };
+}
+
+async function blobSave(config: SiteConfig): Promise<string> {
+  const updatedAt = new Date().toISOString();
+  const payload: BlobStore = {
+    config: { ...config, scene: stripBlobUrlsFromScene(config.scene) },
+    updatedAt,
+  };
+  await configStore().set(BLOB_KEY, JSON.stringify(payload));
+  return updatedAt;
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -92,22 +99,19 @@ export async function loadSiteConfig(): Promise<{
 }> {
   if (IS_NETLIFY) {
     try {
-      const result = await netlifyLoad();
+      const result = await blobLoad();
       return { ...result, source: 'netlify' };
     } catch (err) {
-      console.error('[siteConfigDb] Netlify DB load failed, falling back to local:', err);
+      console.error('[siteConfigDb] Netlify Blobs load failed, falling back to defaults:', err);
     }
   }
   return { ...loadLocalConfig(), source: 'local' };
 }
 
 export async function saveSiteConfig(config: SiteConfig): Promise<string> {
-  if (IS_NETLIFY) {
-    try {
-      return await netlifySave(config);
-    } catch (err) {
-      console.error('[siteConfigDb] Netlify DB save failed, falling back to local:', err);
-    }
-  }
+  // On Netlify, Blobs is the only writable store — the local-file path would
+  // throw EROFS on the read-only function filesystem. Let any Blobs error
+  // propagate to the route handler instead of masking it with a doomed write.
+  if (IS_NETLIFY) return blobSave(config);
   return saveLocalConfig(config);
 }

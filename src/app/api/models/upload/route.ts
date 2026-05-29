@@ -61,6 +61,7 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error('[models/upload] POST failed', err);
-    return Response.json({ error: 'Upload failed' }, { status: 500 });
+    const detail = err instanceof Error ? err.message : String(err);
+    return Response.json({ error: `Upload failed: ${detail}` }, { status: 500 });
   }
 }

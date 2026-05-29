@@ -138,21 +138,29 @@ AR loads `public/models/full_watch/watch_full_default.glb` (the same assembled h
 
 **iOS Quick Look:** add `public/models/full_watch/watch_full_default.usdz` (same pose/scale as the GLB). The app probes for the file and only sets `ios-src` when it is present.
 
-## Scene controls persistence (Netlify Database + Blobs)
+## Scene controls persistence (Netlify Blobs)
 
-The floating **Scene controls** panel (operator UI) saves site-wide tuning to **Netlify Database** and optional GLB overrides to **Netlify Blobs**.
+The floating **Scene controls** panel (operator UI) saves site-wide tuning and
+optional GLB overrides to **Netlify Blobs** — the same serverless-native store
+the model-upload pipeline uses. No database provisioning is required.
 
 | Piece | Role |
 | --- | --- |
-| `netlify/database/migrations/` | Creates `scene_settings` table (applied on deploy) |
+| `jacobco-site-config` blob store | Holds the full site config JSON (`config.json` key) |
 | `GET /api/scene-settings` | Load saved sliders / lighting / model URLs |
 | `PUT /api/scene-settings` | Save (requires admin token when configured) |
 | `POST /api/scene-settings/upload` | Upload hero or configurator `.glb` to Blobs |
 | `GET /api/scene-settings/model/:slot` | Serve stored GLB (`hero` or `config`) |
 
+> **Legacy:** `netlify/database/migrations/` and the `@netlify/database`
+> dependency are unused — an earlier version persisted to Netlify Database, but
+> that backend was never provisioned in production (every write fell back to a
+> local-file write that fails with EROFS on the read-only function filesystem,
+> surfacing as a 500). Persistence now runs entirely on Blobs.
+
 **Deploy on Netlify** (`jacobco-3d`):
 
-1. Push to the linked repo — `@netlify/database` provisions Postgres on first deploy with migrations.
+1. Push to the linked repo — Blobs is enabled automatically; nothing to provision.
 2. In **Site configuration → Environment variables**, add `SCENE_SETTINGS_ADMIN_TOKEN` (long random string).
 3. On the live site, open Scene controls → key icon → paste the same token once per browser.
 4. Changes auto-save after ~1 s; all visitors see the same scene tuning.

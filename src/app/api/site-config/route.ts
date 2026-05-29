@@ -8,14 +8,12 @@ export const runtime = 'nodejs';
 
 export async function GET() {
   try {
-    const { config, updatedAt } = await loadSiteConfig();
-    return Response.json({ config, updatedAt });
+    const { config, updatedAt, source } = await loadSiteConfig();
+    return Response.json({ config, updatedAt, source });
   } catch (err) {
     console.error('[site-config] GET', err);
-    return Response.json(
-      { config: DEFAULT_SITE_CONFIG, updatedAt: null, unavailable: true },
-      { status: 503 },
-    );
+    // Return defaults rather than a hard error so the page always loads.
+    return Response.json({ config: DEFAULT_SITE_CONFIG, updatedAt: null, source: 'default' });
   }
 }
 

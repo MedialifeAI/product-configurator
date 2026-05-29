@@ -1,13 +1,15 @@
 /**
  * Asset variant routing.
  *
- * Three GLB variants exist on disk:
+ * Five GLB variants exist on disk:
  *   - 'original'  → /models/...           (full quality, 37M tris total)
  *   - 'optimized' → /models-optimized/... (Meshopt-encoded; same VRAM as original)
- *   - 'ios'       → /models-ios/...       (decimated ~10% triangle count; iOS-safe)
+ *   - 'ios'       → /models-ios/...       (decimated ~10% triangle count; iOS-safe, all iPhones)
+ *   - 'ios-mh'    → /models-ios-mh/...    (medium-high ~2.2M tris; hero watch only, iPhone 13+)
+ *   - 'ios-xh'    → /models-ios-xh/...    (extra-high ~3.5M tris; hero watch only, iPhone 15 Pro+)
  *
  * Which variant loads is decided by the detected platform + admin config:
- *   1. URL override   `?variant=original|optimized|ios`  (highest priority, QA)
+ *   1. URL override   `?variant=original|optimized|ios|ios-mh|ios-xh`  (highest priority, QA)
  *   2. URL override   `?platform=desktop|android|ios`    (simulate platform)
  *   3. Legacy URL     `?ios=1`                           (simulates iOS platform)
  *   4. Admin config   featureFlags.assetVariantByPlatform[detectedPlatform]
@@ -18,7 +20,11 @@
  */
 import { isIosDevice } from '@/lib/ar';
 
-export type AssetVariant = 'original' | 'optimized' | 'ios';
+/** Which iOS quality tier to use for the hero watch.
+ *  Defined here (canonical source) and re-exported from resolveModelUrl.ts. */
+export type IosHeroVariant = 'ios' | 'ios-mh' | 'ios-xh';
+
+export type AssetVariant = 'original' | 'optimized' | 'ios' | 'ios-mh' | 'ios-xh';
 export type Platform = 'desktop' | 'android' | 'ios';
 
 export interface AssetVariantByPlatform {
@@ -38,7 +44,7 @@ export const DEFAULT_ASSET_VARIANT_BY_PLATFORM: Required<AssetVariantByPlatform>
   ios: 'ios',
 };
 
-const ASSET_VARIANTS: ReadonlySet<AssetVariant> = new Set(['original', 'optimized', 'ios']);
+const ASSET_VARIANTS: ReadonlySet<AssetVariant> = new Set(['original', 'optimized', 'ios', 'ios-mh', 'ios-xh']);
 const PLATFORMS: ReadonlySet<Platform> = new Set(['desktop', 'android', 'ios']);
 
 function readUrlParams(): URLSearchParams | null {
@@ -91,14 +97,26 @@ export function resolveAssetVariant(byPlatform?: AssetVariantByPlatform): AssetV
   return byPlatform?.[platform] ?? DEFAULT_ASSET_VARIANT_BY_PLATFORM[platform];
 }
 
-/** Back-compat convenience for the existing `useIosAssets` boolean threading. */
+/** True when the active variant is any iOS-decimated tier (ios, ios-mh, ios-xh). */
 export function shouldUseIosAssets(byPlatform?: AssetVariantByPlatform): boolean {
-  return resolveAssetVariant(byPlatform) === 'ios';
+  const v = resolveAssetVariant(byPlatform);
+  return v === 'ios' || v === 'ios-mh' || v === 'ios-xh';
 }
 
 /** Back-compat convenience for the existing `useOptimizedAssets` boolean threading. */
 export function shouldUseOptimizedAssets(byPlatform?: AssetVariantByPlatform): boolean {
   return resolveAssetVariant(byPlatform) === 'optimized';
+}
+
+/**
+ * Resolve which iOS quality tier to use for the hero watch model.
+ * Returns 'ios' as the safe default when no specific MH/XH tier is configured.
+ */
+export function resolveIosVariant(byPlatform?: AssetVariantByPlatform): IosHeroVariant {
+  const v = resolveAssetVariant(byPlatform);
+  if (v === 'ios-mh') return 'ios-mh';
+  if (v === 'ios-xh') return 'ios-xh';
+  return 'ios';
 }
 
 /**

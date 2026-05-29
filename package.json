@@ -22,7 +22,8 @@
     "compress": "bash scripts/compress.sh",
     "compress:ar": "node scripts/compress-ar-hero.mjs",
     "strip:movement-globe": "node scripts/strip-globe-from-movement.mjs",
-    "compress:parts": "node scripts/compress-movement-globe.mjs"
+    "compress:parts": "node scripts/compress-movement-globe.mjs",
+    "build:capability-pdf": "node scripts/build-capability-pdf.mjs"
   },
   "dependencies": {
     "@google/model-viewer": "^4.2.0",
@@ -43,6 +44,7 @@
     "@gltf-transform/functions": "^4.1.3",
     "draco3d": "^1.5.7",
     "meshoptimizer": "^0.22.0",
+    "pdfkit": "^0.18.0",
     "sharp": "^0.33.5",
     "@types/node": "^22.7.4",
     "@types/qrcode": "^1.5.6",

@@ -20,6 +20,9 @@ dist/
 Thumbs.db
 .cache-compress/
 public/models-optimized/
+public/models-ios/
+public/models-ios-mh/
+public/models-ios-xh/
 public/models/full_watch/*.usdz
 
 # debug
@@ -30,6 +33,9 @@ yarn-error.log*
 # local env
 .env*.local
 .env
+
+# local admin config store (used when Netlify DB is unavailable)
+.data/
 
 # vercel / netlify
 .vercel
